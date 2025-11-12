@@ -6,6 +6,8 @@
 // ERDDAP Server
 const COASTWATCH = "https://coastwatch.noaa.gov/erddap";
 const USF_ERDDAP = "https://erddap.marine.usf.edu/erddap";
+const PFEG = "https://coastwatch.pfeg.noaa.gov/erddap";
+
 
 /**
  * Layer-Konfigurationen
@@ -77,19 +79,13 @@ export const layers = {
     id: "sst",
     name: "Wassertemperatur (SST)",
     type: "erddap",
-    server: COASTWATCH,
-    datasetId: "noaacwLEOACSPOSSTL3SnrtCDaily",
-    variable: "sea_surface_temperature",
-    units: "°C",
+    server: PFEG,
+    datasetId: "NOAA_DHW",
+    variable: "CRW_SST",
     colorBar: "Rainbow|C=linear|I=15,32",
     belowColorHex: "0x00000000",
     missingColorHex: "0x00000000",
-    opacity: 0.65,
-    legend: {
-      title: "Meeresoberflächentemperatur",
-      description: "Aktuelle Temperatur der obersten Wasserschicht. Optimal für Korallen: 23-29°C",
-      range: "15-32°C"
-    }
+    opacity: 0.65
   },
 
   // 🔥 HITZESTRESS (DHW)
@@ -97,24 +93,13 @@ export const layers = {
     id: "dhw",
     name: "Hitzestress (DHW)",
     type: "erddap",
-    server: COASTWATCH,
-    datasetId: "noaacrwdhwDaily",
-    variable: "degree_heating_week",
-    units: "°C·Wochen",
-    colorBar: "Rainbow|C=linear|I=1.0,8.0",
+    server: PFEG,
+    datasetId: "NOAA_DHW",
+    variable: "CRW_DHW",
+    colorBar: "Rainbow|C=linear|I=1,8",
     belowColorHex: "0x00000000",
     missingColorHex: "0x00000000",
-    interpolate: "nearest",
-    opacity: 0.7,
-    legend: {
-      title: "Degree Heating Weeks (DHW)",
-      description: "Akkumulierter Hitzestress. Warnung ab 4, kritisch ab 8.",
-      levels: [
-        { value: "0-4", label: "Normal", color: "#4CAF50" },
-        { value: "4-8", label: "Bleaching-Warnung", color: "#FFC107" },
-        { value: ">8", label: "Kritisch", color: "#F44336" }
-      ]
-    }
+    opacity: 0.7
   },
 
   // 📊 SST ANOMALIE
@@ -193,7 +178,7 @@ export const overpassQueries = {
     );
     out center;
   `,
-  
+
   harbours: `
     [out:json][timeout:25];
     (
@@ -217,33 +202,33 @@ export const staticPOIs = {
     { name: "Great Barrier Reef - Agincourt Reef", lat: -16.0333, lon: 145.8167, region: "GBR" },
     { name: "Great Barrier Reef - Cod Hole", lat: -14.6667, lon: 145.6167, region: "GBR" },
     { name: "SS Yongala Wreck", lat: -19.3042, lon: 147.6167, region: "GBR" },
-    
+
     // Karibik
     { name: "Blue Hole, Belize", lat: 17.3167, lon: -87.5333, region: "Caribbean" },
     { name: "Cozumel, Mexico", lat: 20.5083, lon: -86.9458, region: "Caribbean" },
     { name: "Bonaire Marine Park", lat: 12.2019, lon: -68.2624, region: "Caribbean" },
-    
+
     // Rotes Meer
     { name: "SS Thistlegorm Wreck", lat: 27.8167, lon: 33.9167, region: "Red Sea" },
     { name: "Ras Mohammed", lat: 27.7333, lon: 34.2333, region: "Red Sea" },
     { name: "Blue Hole Dahab", lat: 28.5833, lon: 34.5167, region: "Red Sea" },
-    
+
     // Indopazifik
     { name: "Raja Ampat, Indonesia", lat: -0.2297, lon: 130.5178, region: "Indo-Pacific" },
     { name: "Komodo National Park", lat: -8.5500, lon: 119.4833, region: "Indo-Pacific" },
     { name: "Sipadan Island, Malaysia", lat: 4.1158, lon: 118.6283, region: "Indo-Pacific" },
     { name: "Tubbataha Reef, Philippines", lat: 8.8583, lon: 119.8167, region: "Indo-Pacific" },
-    
+
     // Malediven
     { name: "Maldives - North Male Atoll", lat: 4.3333, lon: 73.5333, region: "Maldives" },
     { name: "Maldives - South Ari Atoll", lat: 3.7500, lon: 72.8333, region: "Maldives" },
-    
+
     // Pazifik
     { name: "Palau - Blue Corner", lat: 7.2431, lon: 134.2167, region: "Pacific" },
     { name: "Fiji - Rainbow Reef", lat: -16.7167, lon: 179.3333, region: "Pacific" },
     { name: "Galapagos Islands", lat: -0.9538, lon: -90.9656, region: "Pacific" }
   ],
-  
+
   harbours: [
     { name: "Cairns Harbor", lat: -16.9186, lon: 145.7781, region: "Australia" },
     { name: "Port Douglas", lat: -16.4833, lon: 145.4667, region: "Australia" },

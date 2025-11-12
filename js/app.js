@@ -324,8 +324,7 @@ function refreshErddapLayer(layerId) {
 
     // Image Overlay
     const imageOverlay = L.imageOverlay(url, leafletBounds, {
-      opacity: layerConfig.opacity || 0.7,
-      crossOrigin: 'anonymous'
+      opacity: layerConfig.opacity || 0.7
     });
 
     let loaded = false;
@@ -384,8 +383,7 @@ function loadCachedErddapLayer(layerId, url, bbox, layerConfig) {
 
   // Image Overlay aus Cache
   const imageOverlay = L.imageOverlay(url, leafletBounds, {
-    opacity: layerConfig.opacity || 0.7,
-    crossOrigin: 'anonymous'
+    opacity: layerConfig.opacity || 0.7
   });
 
   imageOverlay.on('load', () => {

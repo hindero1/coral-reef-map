@@ -9,11 +9,11 @@
 export function throttle(fn, wait = 250) {
   let lastCall = 0;
   let timeoutId;
-  
-  return function(...args) {
+
+  return function (...args) {
     const now = Date.now();
     const timeSinceLastCall = now - lastCall;
-    
+
     if (timeSinceLastCall >= wait) {
       lastCall = now;
       fn.apply(this, args);
@@ -33,7 +33,7 @@ export function throttle(fn, wait = 250) {
  */
 export function debounce(fn, delay = 300) {
   let timeoutId;
-  return function(...args) {
+  return function (...args) {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => {
       fn.apply(this, args);
@@ -58,71 +58,78 @@ export function normalizeBbox([west, south, east, north], minSize = 0.5) {
   // Longitude normalisieren
   west = wrapLon180(west);
   east = wrapLon180(east);
-  
+
   // Datumsgrenze: Wenn east < west, dann über 180° hinweg
   if (east < west) {
     east += 360;
   }
-  
+
   // Latitude begrenzen (Pole)
   south = Math.max(-85, south);
   north = Math.min(85, north);
-  
+
   // Minimale Größe erzwingen (verhindert zu kleine Bboxen)
   const dy = north - south;
   const dx = east - west;
-  
+
   if (dy < minSize) {
     const centerY = (north + south) / 2;
     south = centerY - minSize / 2;
     north = centerY + minSize / 2;
   }
-  
+
   if (dx < minSize) {
     const centerX = (east + west) / 2;
     west = centerX - minSize / 2;
     east = centerX + minSize / 2;
   }
-  
+
   // Maximale Größe (ganze Welt)
   if (dx > 360) {
     west = -180;
     east = 180;
   }
-  
+
   return [west, south, east, north];
 }
 
-/**
- * Erstellt ISO-Datum für ERDDAP (12:00 UTC)
- */
-export function isoDay(date = new Date()) {
-  const utc = new Date(Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    12, 0, 0, 0
-  ));
-  return utc.toISOString().replace('.000', '');
-}
 
+// Liefert ISO-String für ERDDAP, standardmäßig heute-2 Tage, 12:00Z
+export function erddapDayISO(dateOrOffset = 2) {
+  let d;
+  if (dateOrOffset instanceof Date) {
+    d = new Date(Date.UTC(
+      dateOrOffset.getUTCFullYear(),
+      dateOrOffset.getUTCMonth(),
+      dateOrOffset.getUTCDate(),
+      12, 0, 0, 0
+    ));
+  } else {
+    const offset = Number.isFinite(dateOrOffset) ? dateOrOffset : 2;
+    d = new Date();
+    d.setUTCDate(d.getUTCDate() - offset);
+    d.setUTCHours(12, 0, 0, 0);
+  }
+  // ERDDAP mag '...:00Z' – die .000 lassen wir konsistent weg
+  return d.toISOString().replace('.000', '');
+}
 /**
  * Baut transparente PNG-URL für ERDDAP
  */
 export function buildTransparentPngUrl(layerConfig, opts) {
   const { server, datasetId, variable, colorBar } = layerConfig;
   const { date, bbox, maxPixels = 1024 } = opts;
-  
+
   let [west, south, east, north] = bbox;
-  const day = isoDay(date);
-  
+  const day = erddapDayISO(date ?? 2);
+
   // Datumsgrenze behandeln
   if (east < west) east += 360;
-  
+
   // Bildgröße berechnen (proportional zur Bbox)
   const dx = Math.abs(east - west);
   const dy = Math.abs(north - south);
-  
+
   let width, height;
   if (dx >= dy) {
     width = maxPixels;
@@ -131,10 +138,10 @@ export function buildTransparentPngUrl(layerConfig, opts) {
     height = maxPixels;
     width = Math.max(1, Math.round(maxPixels * (dx / dy)));
   }
-  
+
   // ERDDAP Query
   const query = `${variable}[(${day})][(${south}):(${north})][(${west}):(${east})]`;
-  
+
   // Parameter
   const params = [
     `.draw=surface`,
@@ -142,26 +149,26 @@ export function buildTransparentPngUrl(layerConfig, opts) {
     `.transparent=true`,
     `.bgColor=0x00000000`
   ];
-  
+
   // Farbskala
   if (colorBar) {
     params.push(`.colorBar=${encodeURIComponent(colorBar)}`);
   }
-  
+
   // Out-of-range Farben (transparent)
   const belowHex = layerConfig.belowColorHex || "0x00000000";
   const aboveHex = layerConfig.aboveColorHex;
   const missingHex = layerConfig.missingColorHex || "0x00000000";
-  
+
   params.push(`.belowMinColor=${belowHex}`);
   if (aboveHex) params.push(`.aboveMaxColor=${aboveHex}`);
   params.push(`.missingColor=${missingHex}`);
-  
+
   // Interpolation
   if (layerConfig.interpolate) {
     params.push(`.interpolate=${layerConfig.interpolate}`);
   }
-  
+
   return `${server}/griddap/${datasetId}.transparentPng?${query}&${params.join('&')}`;
 }
 
@@ -187,19 +194,19 @@ export function hideLoading() {
 export function updateLegend(layerConfig) {
   const legendContent = document.getElementById('legend-content');
   if (!legendContent || !layerConfig || !layerConfig.legend) return;
-  
+
   const { title, description, range, levels, color } = layerConfig.legend;
-  
+
   let html = `<div class="legend-item"><strong>${title}</strong></div>`;
-  
+
   if (description) {
     html += `<div class="legend-item" style="font-size: 0.8rem; color: #666;">${description}</div>`;
   }
-  
+
   if (range) {
     html += `<div class="legend-item" style="margin-top: 0.5rem;">Bereich: <strong>${range}</strong></div>`;
   }
-  
+
   if (levels) {
     html += '<div style="margin-top: 0.75rem;">';
     levels.forEach(level => {
@@ -212,7 +219,7 @@ export function updateLegend(layerConfig) {
     });
     html += '</div>';
   }
-  
+
   if (color && !levels) {
     html += `
       <div class="legend-item" style="margin-top: 0.5rem;">
@@ -221,7 +228,7 @@ export function updateLegend(layerConfig) {
       </div>
     `;
   }
-  
+
   legendContent.innerHTML = html;
 }
 
@@ -268,17 +275,17 @@ export function getCacheItem(key) {
   try {
     const cached = localStorage.getItem(key);
     if (!cached) return null;
-    
+
     const cacheData = JSON.parse(cached);
     const age = Date.now() - cacheData.timestamp;
-    
+
     // Prüfe ob Cache noch gültig (24h)
     if (age > CACHE_DURATION) {
       console.log(`🕐 Cache abgelaufen: ${key} (${(age / 3600000).toFixed(1)}h alt)`);
       localStorage.removeItem(key);
       return null;
     }
-    
+
     console.log(`✅ Cache-Hit: ${key} (${(age / 3600000).toFixed(1)}h alt)`);
     return cacheData.url;
   } catch (error) {
@@ -293,16 +300,16 @@ export function getCacheItem(key) {
 export function cleanOldCache() {
   console.log('🧹 Bereinige alten Cache...');
   let cleaned = 0;
-  
+
   try {
     const keys = Object.keys(localStorage);
-    
+
     keys.forEach(key => {
       if (key.startsWith(CACHE_PREFIX)) {
         try {
           const cached = JSON.parse(localStorage.getItem(key));
           const age = Date.now() - cached.timestamp;
-          
+
           if (age > CACHE_DURATION) {
             localStorage.removeItem(key);
             cleaned++;
@@ -314,7 +321,7 @@ export function cleanOldCache() {
         }
       }
     });
-    
+
     console.log(`✅ ${cleaned} alte Cache-Einträge gelöscht`);
   } catch (error) {
     console.warn('⚠️ Cache-Bereinigung fehlgeschlagen:', error);
@@ -327,13 +334,13 @@ export function cleanOldCache() {
 export function getCacheStats() {
   const keys = Object.keys(localStorage);
   const cacheKeys = keys.filter(k => k.startsWith(CACHE_PREFIX));
-  
+
   let totalSize = 0;
   cacheKeys.forEach(key => {
     const item = localStorage.getItem(key);
     totalSize += item ? item.length : 0;
   });
-  
+
   return {
     count: cacheKeys.length,
     sizeMB: (totalSize / (1024 * 1024)).toFixed(2)
@@ -347,23 +354,23 @@ export async function fetchOverpassData(query, bbox) {
   const [west, south, east, north] = bbox;
   const bboxStr = `${south},${west},${north},${east}`;
   const filledQuery = query.replace('{{bbox}}', bboxStr);
-  
+
   // Overpass API Server mit CORS-Proxy
   const servers = [
     // Option 1: Direkter Zugriff (funktioniert nur mit CORS-Extension)
     'https://overpass-api.de/api/interpreter',
-    
+
     // Option 2: CORS-Proxy (funktioniert immer, aber langsamer)
     'https://corsproxy.io/?https://overpass-api.de/api/interpreter',
-    
+
     // Option 3: Alternativer CORS-Proxy
     'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://overpass-api.de/api/interpreter')
   ];
-  
+
   for (const url of servers) {
     try {
       console.log(`🔍 Versuche Overpass via: ${url.includes('proxy') || url.includes('allorigins') ? 'CORS-Proxy' : 'Direkt'}`);
-      
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -371,28 +378,28 @@ export async function fetchOverpassData(query, bbox) {
         },
         body: `data=${encodeURIComponent(filledQuery)}`
       });
-      
+
       if (!response.ok) {
         console.warn(`⚠️ Server antwortet mit ${response.status}`);
         continue;
       }
-      
+
       const data = await response.json();
       console.log(`✅ Overpass erfolgreich: ${data.elements?.length || 0} Elemente`);
-      
+
       if (data.elements && data.elements.length > 0) {
         return data.elements;
       }
-      
+
       console.warn('⚠️ Server antwortete, aber 0 Ergebnisse');
       continue;
-      
+
     } catch (error) {
       console.warn(`❌ Fehler bei Anfrage:`, error.message);
       continue;
     }
   }
-  
+
   // Alle Server fehlgeschlagen
   console.error('❌ Alle Overpass-Server nicht erreichbar (inkl. CORS-Proxies)');
   throw new Error('Overpass API nicht verfügbar');
@@ -403,10 +410,10 @@ export async function fetchOverpassData(query, bbox) {
  */
 export function createOverpassMarkers(elements, iconHtml, iconSize = [25, 25]) {
   const markers = [];
-  
+
   elements.forEach(element => {
     let lat, lon;
-    
+
     // Koordinaten extrahieren (node, way center, oder relation center)
     if (element.lat && element.lon) {
       lat = element.lat;
@@ -417,41 +424,41 @@ export function createOverpassMarkers(elements, iconHtml, iconSize = [25, 25]) {
     } else {
       return; // Überspringe wenn keine Koordinaten
     }
-    
+
     const icon = L.divIcon({
       html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">${iconHtml}</div>`,
       className: '',
       iconSize: iconSize,
       iconAnchor: [iconSize[0] / 2, iconSize[1] / 2]
     });
-    
+
     const marker = L.marker([lat, lon], { icon });
-    
+
     // Popup mit Infos
     const tags = element.tags || {};
     const name = tags.name || tags['name:en'] || 'Unbenannt';
     const type = tags.tourism || tags.amenity || tags.sport || tags['seamark:type'] || 'POI';
     const operator = tags.operator || '';
     const website = tags.website || tags.contact?.website || '';
-    
+
     let popupHTML = `
       <div class="popup-title">${name}</div>
       <div class="popup-info">
         📍 ${type}<br>
     `;
-    
+
     if (operator) popupHTML += `🏢 ${operator}<br>`;
     if (website) popupHTML += `🌐 <a href="${website}" target="_blank">Website</a><br>`;
-    
+
     popupHTML += `
         <small>Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}</small>
       </div>
     `;
-    
+
     marker.bindPopup(popupHTML);
     markers.push(marker);
   });
-  
+
   console.log(`✅ ${markers.length} Marker erstellt`);
   return markers;
 }
