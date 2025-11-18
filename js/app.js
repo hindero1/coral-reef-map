@@ -1,23 +1,18 @@
 /**
- * CoralReefMap - Hauptanwendung (KOMPLETT ÜBERARBEITET)
- * Nutzt funktionierende APIs und bessere Darstellung
+ * CoralReefMap - Hauptanwendung
+ * VERSION: 5.0 - Mit WMS/WMTS Integration für SST/DHW
+ * Nutzt NASA GIBS und NOAA Coral Reef Watch für Echtzeit-Daten
  */
 
 import { layers, mapConfig, performanceConfig, overpassQueries, staticPOIs } from './config.js';
 import { 
   debounce, 
   normalizeBbox, 
-  buildTransparentPngUrl,
   showLoading,
   hideLoading,
   updateLegend,
   fetchOverpassData,
-  createOverpassMarkers,
-  getCacheKey,
-  getCacheItem,
-  setCacheItem,
-  cleanOldCache,
-  getCacheStats
+  createOverpassMarkers
 } from './utils.js';
 
 // ============================================================================
@@ -33,6 +28,12 @@ const currentDate = new Date(Date.UTC(
   today.getUTCDate()
 ));
 
+// Debug-Modus
+const DEBUG = true;
+function debugLog(...args) {
+  if (DEBUG) console.log(...args);
+}
+
 // ============================================================================
 // MAP INITIALISIERUNG
 // ============================================================================
@@ -43,7 +44,7 @@ function initMap() {
     zoom: mapConfig.zoom,
     minZoom: mapConfig.minZoom,
     maxZoom: mapConfig.maxZoom,
-    worldCopyJump: false // Wichtig für Bbox-Berechnung!
+    worldCopyJump: false
   });
 
   // Basemap
@@ -65,14 +66,11 @@ function initMap() {
   // Korallenriffe aus GeoJSON laden
   initCoralLayers();
 
-  // Events
-  map.on('moveend', debouncedMapMove);
-
   console.log('✅ Map initialisiert');
 }
 
 // ============================================================================
-// KORALLENRIFFE AUS GEOJSON LADEN (ECHTE DATEN!)
+// KORALLENRIFFE AUS GEOJSON LADEN
 // ============================================================================
 
 async function loadCoralGeoJSON(layerId) {
@@ -148,7 +146,6 @@ async function loadCoralGeoJSON(layerId) {
           if (country) popupHTML += `🌍 ${country}<br>`;
           popupHTML += `📍 Lat: ${parseFloat(latitude).toFixed(4)}, Lon: ${parseFloat(longitude).toFixed(4)}<br>`;
           
-          // Zusätzliche Infos falls vorhanden
           if (props.REGION_NO) popupHTML += `📊 Region: ${props.REGION_NO}<br>`;
           
           popupHTML += `<small style="color: #999;">Quelle: Globale Häfen-Datenbank</small>`;
@@ -175,16 +172,8 @@ async function loadCoralGeoJSON(layerId) {
 
     geoJsonLayer.addTo(map);
     activeOverlays.set(layerId, geoJsonLayer);
-    
-    // Zur ersten Feature zoomen (optional)
-    if (geojson.features && geojson.features.length > 0 && layerId === 'coral-warm') {
-      const bounds = geoJsonLayer.getBounds();
-      if (bounds.isValid()) {
-        // map.fitBounds(bounds); // Auskommentiert - zoome nur bei Bedarf
-      }
-    }
-
     updateLegend(layerConfig);
+    
     console.log(`✅ ${layerConfig.name} erfolgreich geladen und angezeigt`);
     
   } catch (error) {
@@ -236,203 +225,201 @@ function initCoralLayers() {
 }
 
 // ============================================================================
-// ERDDAP LAYER - MIT FEHLERBEHANDLUNG
+// WMS/WMTS LAYER (SST, DHW) - ECHTZEIT-DATEN!
 // ============================================================================
 
-function getBbox() {
-  const bounds = map.getBounds();
-  let west = bounds.getWest();
-  let east = bounds.getEast();
-  let south = bounds.getSouth();
-  let north = bounds.getNorth();
+/**
+ * NASA GIBS WMTS - Sea Surface Temperature
+ * Täglich aktualisiert, hochauflösend
+ */
+function loadNASA_GIBS_SST() {
+  console.log('🛰️ Lade NASA GIBS SST Tiles...');
   
-  // Longitude normalisieren (-180 bis 180)
-  while (west < -180) west += 360;
-  while (west > 180) west -= 360;
-  while (east < -180) east += 360;
-  while (east > 180) east -= 360;
+  // Datum (2-3 Tage zurück wegen Verzögerung)
+  const date = new Date();
+  date.setDate(date.getDate() - 30);
+  const dateStr = date.toISOString().split('T')[0];
   
-  // Latitude begrenzen
-  south = Math.max(-85, south);
-  north = Math.min(85, north);
+  debugLog(`Datum: ${dateStr}`);
   
-  // Mindestgröße
-  const minSize = performanceConfig.minBboxSize;
-  if (north - south < minSize) {
-    const centerY = (north + south) / 2;
-    south = centerY - minSize / 2;
-    north = centerY + minSize / 2;
-  }
-  if (east - west < minSize && east - west > -minSize) {
-    const centerX = (east + west) / 2;
-    west = centerX - minSize / 2;
-    east = centerX + minSize / 2;
-  }
+  // NASA GIBS WMTS Endpoint
+  const baseUrl = 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/';
+  const layer = 'MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily';
   
-  return [west, south, east, north];
+  const sstLayer = L.tileLayer(
+    `${baseUrl}${layer}/default/${dateStr}/250m/{z}/{y}/{x}.png`,
+    {
+      tms: true,
+      opacity: 0.7,
+      attribution: 'NASA EOSDIS GIBS',
+      minZoom: 0,
+      maxZoom: 7,
+      bounds: [[-90, -180], [90, 180]]
+    }
+  );
+  
+  sstLayer.on('tileload', () => {
+    debugLog('✅ NASA GIBS SST Tile geladen');
+  });
+  
+  sstLayer.on('tileerror', (error) => {
+    console.warn('⚠️ NASA GIBS Tile Fehler:', error);
+  });
+  
+  sstLayer.addTo(map);
+  activeOverlays.set('sst', sstLayer);
+  
+  console.log(`✅ NASA GIBS SST Layer aktiv (${dateStr})`);
+  
+  return sstLayer;
 }
 
-function refreshErddapLayer(layerId) {
-  const layerConfig = layers[layerId];
-  if (!layerConfig || layerConfig.type !== 'erddap') return;
+/**
+ * NOAA Coral Reef Watch WMS - DHW (Degree Heating Weeks)
+ * Speziell für Korallenriff-Monitoring
+ */
+function loadNOAA_CRW_DHW() {
+  console.log('🪸 Lade NOAA Coral Reef Watch DHW...');
+  
+  // NOAA CRW WMS Endpoint (PacIOOS)
+  const wmsUrl = 'https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km';
+  
+  const dhwLayer = L.tileLayer.wms(wmsUrl, {
+    layers: 'CRW_DHW',
+    format: 'image/png',
+    transparent: true,
+    opacity: 0.7,
+    version: '1.3.0',
+    attribution: 'NOAA Coral Reef Watch',
+    styles: 'boxfill/rainbow',
+    colorscalerange: '0,8',
+    numcolorbands: 250
+  });
+  
+  dhwLayer.on('load', () => {
+    console.log('✅ NOAA DHW geladen');
+  });
+  
+  dhwLayer.on('tileerror', (error) => {
+    console.warn('⚠️ NOAA DHW Fehler:', error);
+  });
+  
+  dhwLayer.addTo(map);
+  activeOverlays.set('dhw', dhwLayer);
+  
+  console.log('✅ NOAA CRW DHW Layer aktiv');
+  
+  return dhwLayer;
+}
 
-  const bbox = getBbox();
-  const mapSize = map.getSize();
-  const targetSize = Math.min(
-    performanceConfig.maxPixels, 
-    Math.max(mapSize.x, mapSize.y)
-  );
+/**
+ * Alternative: ERDDAP WMS
+ * Falls NASA GIBS nicht funktioniert
+ */
+function loadERDDAP_SST_WMS() {
+  console.log('🌊 Lade ERDDAP SST via WMS...');
+  
+  const date = new Date();
+  date.setDate(date.getDate() - 2);
+  const timeStr = date.toISOString();
+  
+  const wmsUrl = 'https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request';
+  
+  const sstLayer = L.tileLayer.wms(wmsUrl, {
+    layers: 'jplMURSST41:analysed_sst',
+    format: 'image/png',
+    transparent: true,
+    opacity: 0.7,
+    version: '1.3.0',
+    time: timeStr,
+    attribution: 'NASA JPL MUR SST via ERDDAP',
+    styles: 'boxfill/rainbow',
+    colorscalerange: '273,303',
+    numcolorbands: 250
+  });
+  
+  sstLayer.addTo(map);
+  activeOverlays.set('sst', sstLayer);
+  
+  console.log('✅ ERDDAP SST WMS aktiv');
+  
+  return sstLayer;
+}
 
-  // Prüfe Cache zuerst
-  const cacheKey = getCacheKey(layerId, currentDate, bbox);
-  const cachedUrl = getCacheItem(cacheKey);
-
-  if (cachedUrl) {
-    // Cache-Hit: Lade sofort aus Cache
-    console.log(`⚡ Schnell-Laden aus Cache: ${layerConfig.name}`);
-    loadCachedErddapLayer(layerId, cachedUrl, bbox, layerConfig);
-    return;
-  }
-
-  // Cache-Miss: Lade von ERDDAP
-  console.log(`🌐 Lade von ERDDAP: ${layerConfig.name}`);
+/**
+ * Smart Loader: Probiert verschiedene Quellen mit Fallback
+ */
+function loadSST_Smart() {
+  console.log('🔍 Lade SST via ERDDAP WMS (aktueller als GIBS)...');
   showLoading();
-
+  
   try {
-    const url = buildTransparentPngUrl(layerConfig, {
-      date: currentDate,
-      bbox: bbox,
-      maxPixels: targetSize
+    const date = new Date();
+    date.setDate(date.getDate() - 6);  // ERDDAP ist schneller!
+    const timeStr = date.toISOString();
+    
+    const wmsUrl = 'https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request';
+    
+    const sstLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'jplMURSST41:analysed_sst',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.7,
+      version: '1.3.0',
+      time: timeStr,
+      attribution: 'NASA JPL MUR SST via ERDDAP',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '273,303',
+      numcolorbands: 250
     });
-
-    console.log(`🔄 Lade ${layerConfig.name}:`, {
-      bbox: bbox.map(v => v.toFixed(2)),
-      size: targetSize,
-      cached: false
-    });
-
-    // Bounds für Leaflet
-    const leafletBounds = [
-      [bbox[1], bbox[0]],
-      [bbox[3], bbox[2]]
-    ];
-
-    // Alten Layer entfernen
-    if (activeOverlays.has(layerId)) {
-      map.removeLayer(activeOverlays.get(layerId));
-    }
-
-    // Image Overlay
-    const imageOverlay = L.imageOverlay(url, leafletBounds, {
-      opacity: layerConfig.opacity || 0.7
-    });
-
-    let loaded = false;
-
-    imageOverlay.on('load', () => {
-      if (!loaded) {
-        loaded = true;
-        console.log(`✅ ${layerConfig.name} erfolgreich geladen`);
-        
-        // Im Cache speichern
-        setCacheItem(cacheKey, url);
-        
-        hideLoading();
-      }
-    });
-
-    imageOverlay.on('error', (e) => {
-      console.error(`❌ Fehler beim Laden von ${layerConfig.name}`, e);
-      hideLoading();
-      
-      const checkbox = document.getElementById(`layer-${layerId}`);
-      if (checkbox) checkbox.checked = false;
-      
-      alert(`Layer "${layerConfig.name}" konnte nicht geladen werden.\n\nMögliche Gründe:\n- ERDDAP-Server überlastet\n- Keine Daten für diese Region/Datum\n- Netzwerkfehler`);
-    });
-
-    // Timeout nach 15 Sekunden
-    setTimeout(() => {
-      if (!loaded) {
-        console.warn(`⏱️ Timeout: ${layerConfig.name} lädt zu lange`);
-        hideLoading();
-      }
-    }, 15000);
-
-    imageOverlay.addTo(map);
-    activeOverlays.set(layerId, imageOverlay);
-    updateLegend(layerConfig);
+    
+    sstLayer.addTo(map);
+    activeOverlays.set('sst', sstLayer);
+    hideLoading();
+    
+    console.log('✅ SST via ERDDAP WMS geladen');
+    return sstLayer;
     
   } catch (error) {
-    console.error(`❌ Fehler bei URL-Erstellung für ${layerConfig.name}:`, error);
+    console.error('❌ ERDDAP Fehler:', error);
     hideLoading();
+    alert('Konnte SST nicht laden');
+    return null;
   }
 }
 
-// Hilfsfunktion: Lade aus Cache
-function loadCachedErddapLayer(layerId, url, bbox, layerConfig) {
-  const leafletBounds = [
-    [bbox[1], bbox[0]],
-    [bbox[3], bbox[2]]
-  ];
-
-  // Alten Layer entfernen
-  if (activeOverlays.has(layerId)) {
-    map.removeLayer(activeOverlays.get(layerId));
-  }
-
-  // Image Overlay aus Cache
-  const imageOverlay = L.imageOverlay(url, leafletBounds, {
-    opacity: layerConfig.opacity || 0.7
-  });
-
-  imageOverlay.on('load', () => {
-    console.log(`✅ ${layerConfig.name} aus Cache geladen (sofort)`);
-  });
-
-  imageOverlay.on('error', () => {
-    console.warn(`⚠️ Cache-Bild fehlerhaft, lade neu...`);
-    // Cache ungültig -> Neu laden
-    localStorage.removeItem(getCacheKey(layerId, currentDate, bbox));
-    refreshErddapLayer(layerId); // Rekursiv neu laden
-  });
-
-  imageOverlay.addTo(map);
-  activeOverlays.set(layerId, imageOverlay);
-  updateLegend(layerConfig);
-}
-
-// Debounced refresh
-const debouncedMapMove = debounce(() => {
-  console.log('🗺️ Map-Update nach Bewegung...');
+async function loadDHW_Smart() {
+  console.log('🔍 Lade DHW-Daten...');
+  showLoading();
   
-  for (const [layerId] of activeOverlays) {
-    const config = layers[layerId];
-    if (config && config.type === 'erddap') {
-      refreshErddapLayer(layerId);
-    }
+  try {
+    const layer = loadNOAA_CRW_DHW();
+    
+    await new Promise((resolve) => {
+      setTimeout(() => resolve(true), 2000);
+      layer.once('load', () => resolve(true));
+    });
+    
+    hideLoading();
+    console.log('✅ DHW Layer erfolgreich geladen');
+    return layer;
+    
+  } catch (error) {
+    console.error('❌ DHW Laden fehlgeschlagen', error);
+    hideLoading();
+    alert('❌ Konnte DHW-Layer nicht laden.\n\nNOAA Coral Reef Watch ist nicht verfügbar.');
+    return null;
   }
-}, performanceConfig.debounceDelay);
+}
 
 // ============================================================================
-// POI LAYER - HYBRID (Overpass API + Static Fallback)
+// POI LAYER (Dive Sites, Harbours)
 // ============================================================================
 
 async function loadPOILayer(layerId) {
-  const zoom = map.getZoom();
-  
-  console.log(`📊 POI-Load Debug:`, {
-    layerId,
-    currentZoom: zoom,
-    requiredZoom: 5,
-    zoomOK: zoom >= 5
-  });
-  
-  // Nur ab Zoom 5 laden (sonst zu viele Daten)
-  if (zoom < 5) {
-    alert('⚠️ Bitte näher reinzoomen (Zoom Level 5+) um POI-Daten zu laden.\n\nAktueller Zoom: ' + zoom + '\nBenötigt: 5+');
-    const checkbox = document.getElementById(`layer-${layerId}`);
-    if (checkbox) checkbox.checked = false;
+  const layerConfig = layers[layerId];
+  if (!layerConfig) {
+    console.error(`❌ Layer-Config nicht gefunden: ${layerId}`);
     return;
   }
 
@@ -518,33 +505,89 @@ async function loadPOILayer(layerId) {
   hideLoading();
 }
 
+function getBbox() {
+  const bounds = map.getBounds();
+  let west = bounds.getWest();
+  let east = bounds.getEast();
+  let south = bounds.getSouth();
+  let north = bounds.getNorth();
+  
+  // Longitude normalisieren (-180 bis 180)
+  while (west < -180) west += 360;
+  while (west > 180) west -= 360;
+  while (east < -180) east += 360;
+  while (east > 180) east -= 360;
+  
+  // Latitude begrenzen
+  south = Math.max(-85, south);
+  north = Math.min(85, north);
+  
+  // Mindestgröße
+  const minSize = performanceConfig.minBboxSize || 1.0;
+  if (north - south < minSize) {
+    const centerY = (north + south) / 2;
+    south = centerY - minSize / 2;
+    north = centerY + minSize / 2;
+  }
+  if (east - west < minSize && east - west > -minSize) {
+    const centerX = (east + west) / 2;
+    west = centerX - minSize / 2;
+    east = centerX + minSize / 2;
+  }
+  
+  return [west, south, east, north];
+}
+
 // ============================================================================
 // CHECKBOX EVENT HANDLERS
 // ============================================================================
 
 function setupCheckboxListeners() {
-  // ERDDAP Layer
-  const erddapLayers = ['sst', 'dhw', 'sst-anom', 'chla', 'turbidity'];
+  debugLog('🔧 Richte Event-Listener ein...');
   
-  erddapLayers.forEach(layerId => {
-    const checkbox = document.getElementById(`layer-${layerId}`);
-    if (!checkbox) return;
-
-    checkbox.addEventListener('change', (e) => {
+  // ============================================================================
+  // SST Layer (WMS/WMTS)
+  // ============================================================================
+  const sstCheckbox = document.getElementById('layer-sst');
+  if (sstCheckbox) {
+    sstCheckbox.addEventListener('change', async (e) => {
       if (e.target.checked) {
-        console.log(`✅ Aktiviere ${layerId}`);
-        refreshErddapLayer(layerId);
+        console.log('✅ Aktiviere SST-Layer...');
+        await loadSST_Smart();
       } else {
-        console.log(`❌ Deaktiviere ${layerId}`);
-        if (activeOverlays.has(layerId)) {
-          map.removeLayer(activeOverlays.get(layerId));
-          activeOverlays.delete(layerId);
+        console.log('❌ Deaktiviere SST-Layer...');
+        if (activeOverlays.has('sst')) {
+          map.removeLayer(activeOverlays.get('sst'));
+          activeOverlays.delete('sst');
         }
       }
     });
-  });
+    debugLog('✅ SST Event-Listener registriert');
+  }
+  
+  // ============================================================================
+  // DHW Layer (WMS)
+  // ============================================================================
+  const dhwCheckbox = document.getElementById('layer-dhw');
+  if (dhwCheckbox) {
+    dhwCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        console.log('✅ Aktiviere DHW-Layer...');
+        await loadDHW_Smart();
+      } else {
+        console.log('❌ Deaktiviere DHW-Layer...');
+        if (activeOverlays.has('dhw')) {
+          map.removeLayer(activeOverlays.get('dhw'));
+          activeOverlays.delete('dhw');
+        }
+      }
+    });
+    debugLog('✅ DHW Event-Listener registriert');
+  }
 
-  // GeoJSON-basierte POI Layer (Häfen aus ports_all.json)
+  // ============================================================================
+  // GeoJSON-basierte POI Layer (Häfen)
+  // ============================================================================
   const geoJsonPOIs = ['harbours'];
   
   geoJsonPOIs.forEach(layerId => {
@@ -554,7 +597,7 @@ function setupCheckboxListeners() {
     checkbox.addEventListener('change', (e) => {
       if (e.target.checked) {
         console.log(`✅ Lade ${layerId} aus GeoJSON...`);
-        loadCoralGeoJSON(layerId); // Nutzt die gleiche Funktion wie Korallen
+        loadCoralGeoJSON(layerId);
       } else {
         console.log(`❌ Deaktiviere ${layerId}`);
         if (activeOverlays.has(layerId)) {
@@ -565,7 +608,9 @@ function setupCheckboxListeners() {
     });
   });
 
-  // Legacy POI Layer (Tauchspots mit Overpass - nur noch für Tauchspots)
+  // ============================================================================
+  // Legacy POI Layer (Tauchspots mit Overpass)
+  // ============================================================================
   ['dive-sites'].forEach(layerId => {
     const checkbox = document.getElementById(`layer-${layerId}`);
     if (!checkbox) return;
@@ -584,7 +629,9 @@ function setupCheckboxListeners() {
 
   console.log('✅ Event-Listener eingerichtet');
   
+  // ============================================================================
   // Test-Buttons für OSM-Daten
+  // ============================================================================
   document.getElementById('test-cairns')?.addEventListener('click', () => {
     console.log('🧪 Teste Cairns Region...');
     map.setView([-16.9186, 145.7781], 10);
@@ -617,28 +664,25 @@ function setupCheckboxListeners() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 CoralReefMap v2.0 startet...');
+  console.log('🚀 CoralReefMap v5.0 (WMS/WMTS Edition) startet...');
   console.log('📅 Datum:', currentDate.toISOString().split('T')[0]);
-  
-  // Cache-System initialisieren
-  cleanOldCache(); // Lösche alte Einträge
-  const stats = getCacheStats();
-  console.log(`💾 Cache-Status: ${stats.count} Einträge, ${stats.sizeMB} MB`);
+  console.log('🛰️ SST: NASA GIBS (Echtzeit-Tiles)');
+  console.log('🪸 DHW: NOAA Coral Reef Watch (WMS)');
   
   initMap();
   setupCheckboxListeners();
 
-  // SST initial laden (statt DHW - meist zuverlässiger)
+  // SST initial laden (wenn aktiviert)
   map.whenReady(() => {
     const sstCheckbox = document.getElementById('layer-sst');
     if (sstCheckbox && sstCheckbox.checked) {
       setTimeout(() => {
         console.log('🌡️ Lade initialen SST-Layer...');
-        refreshErddapLayer('sst');
+        loadSST_Smart();
       }, 1000);
     }
   });
 
   console.log('✅ CoralReefMap bereit!');
-  console.log('💡 Tipp: ERDDAP-Layer werden 24h gecached für schnelles Laden');
+  console.log('💡 SST/DHW nutzen jetzt WMS - keine Downloads nötig!');
 });

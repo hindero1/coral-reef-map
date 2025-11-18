@@ -1,19 +1,14 @@
 /**
  * Konfigurationsdatei für die CoralReefMap
- * KOMPLETT AKTUALISIERT für lokale GeoJSON-Dateien + POI-Support
+ * VERSION: 5.0 - WMS/WMTS Integration
  */
 
-// ERDDAP Server
-const COASTWATCH = "https://coastwatch.noaa.gov/erddap";
-const USF_ERDDAP = "https://erddap.marine.usf.edu/erddap";
-const PFEG = "https://coastwatch.pfeg.noaa.gov/erddap";
+// ============================================================================
+// LAYER KONFIGURATIONEN
+// ============================================================================
 
-
-/**
- * Layer-Konfigurationen
- */
 export const layers = {
-  // 🪸 WARMWASSER-KORALLENRIFFE (kombiniert: Polygone + Punkte)
+  // 🪸 WARMWASSER-KORALLENRIFFE
   "coral-warm": {
     id: "coral-warm",
     name: "Warmwasser-Korallenriffe",
@@ -33,7 +28,7 @@ export const layers = {
     }
   },
 
-  // ❄️ KALTWASSER-KORALLENRIFFE (kombiniert: Polygone + Punkte)
+  // ❄️ KALTWASSER-KORALLENRIFFE
   "coral-cold": {
     id: "coral-cold",
     name: "Kaltwasser-Korallenriffe",
@@ -53,7 +48,7 @@ export const layers = {
     }
   },
 
-  // ⚓ HÄFEN (aus ports_all.json)
+  // ⚓ HÄFEN
   "harbours": {
     id: "harbours",
     name: "Häfen",
@@ -74,98 +69,64 @@ export const layers = {
     icon: "⚓"
   },
 
-  // 🌡️ WASSERTEMPERATUR (SST)
+  // 🌡️ WASSERTEMPERATUR (SST) - WMS/WMTS
   sst: {
     id: "sst",
     name: "Wassertemperatur (SST)",
-    type: "erddap",
-    server: PFEG,
-    datasetId: "NOAA_DHW",
-    variable: "CRW_SST",
-    colorBar: "Rainbow|C=linear|I=15,32",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.65
+    type: "wmts",  // WMS/WMTS Layer
+    
+    // NASA GIBS (Primary)
+    wmtsUrl: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily",
+    
+    // ERDDAP WMS (Fallback)
+    wmsUrl: "https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request",
+    wmsLayers: "jplMURSST41:analysed_sst",
+    
+    legend: {
+      title: "Meeresoberflächentemperatur",
+      description: "NASA GIBS - Täglich aktualisierte Satellitendaten",
+      source: "MODIS Aqua L3 SST (4km)",
+      levels: [
+        { value: "< 10°C", color: "#0000FF", label: "Sehr kalt (Polar)" },
+        { value: "10-15°C", color: "#00FFFF", label: "Kalt" },
+        { value: "15-20°C", color: "#00FF00", label: "Kühl" },
+        { value: "20-25°C", color: "#FFFF00", label: "Gemäßigt" },
+        { value: "25-28°C", color: "#FF8800", label: "Warm (Optimal)" },
+        { value: "> 28°C", color: "#FF0000", label: "Heiß (Bleaching-Risiko)" }
+      ]
+    }
   },
 
-  // 🔥 HITZESTRESS (DHW)
+  // 🔥 HITZESTRESS (DHW) - WMS
   dhw: {
     id: "dhw",
     name: "Hitzestress (DHW)",
-    type: "erddap",
-    server: PFEG,
-    datasetId: "NOAA_DHW",
-    variable: "CRW_DHW",
-    colorBar: "Rainbow|C=linear|I=1,8",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.7
-  },
-
-  // 📊 SST ANOMALIE
-  "sst-anom": {
-    id: "sst-anom",
-    name: "SST Anomalie",
-    type: "erddap",
-    server: USF_ERDDAP,
-    datasetId: "jplMURSST41anom1day",
-    variable: "anom",
-    units: "°C",
-    colorBar: "RdBu_r|C=linear|I=-3,3",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.65,
+    type: "wms",  // WMS Layer
+    
+    // NOAA Coral Reef Watch
+    wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
+    wmsLayers: "CRW_DHW",
+    
     legend: {
-      title: "Temperatur-Anomalie",
-      description: "Abweichung vom langjährigen Durchschnitt",
-      range: "-3 bis +3°C"
-    }
-  },
-
-  // 🌱 CHLOROPHYLL-A
-  chla: {
-    id: "chla",
-    name: "Chlorophyll-a",
-    type: "erddap",
-    server: COASTWATCH,
-    datasetId: "noaacwNPPVIIRSSQchlaDaily",
-    variable: "chlor_a",
-    units: "mg m⁻³",
-    colorBar: "Rainbow|C=log|I=0.01,20",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.6,
-    legend: {
-      title: "Chlorophyll-a Konzentration",
-      description: "Indikator für Algenwachstum. Hohe Werte = Verschmutzung/Eutrophierung",
-      range: "0.01-20 mg/m³"
-    }
-  },
-
-  // 🌊 TRÜBUNG
-  turbidity: {
-    id: "turbidity",
-    name: "Trübung (Kd490)",
-    type: "erddap",
-    server: COASTWATCH,
-    datasetId: "noaacwNPPVIIRSkd490Daily",
-    variable: "kd_490",
-    units: "m⁻¹",
-    colorBar: "Rainbow|C=log|I=0.01,2",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.6,
-    legend: {
-      title: "Wasser-Trübung (Kd490)",
-      description: "Lichtdurchlässigkeit des Wassers. Wichtig für Photosynthese der Korallen.",
-      range: "0.01-2 m⁻¹"
+      title: "Degree Heating Weeks (DHW)",
+      description: "NOAA Coral Reef Watch - Akkumulierter Hitzestress",
+      source: "5km Resolution",
+      levels: [
+        { value: "0-2", color: "#00FF00", label: "Normal" },
+        { value: "2-4", color: "#AAFF00", label: "Leicht erhöht" },
+        { value: "4-6", color: "#FFFF00", label: "Warnung" },
+        { value: "6-8", color: "#FF8800", label: "Bleaching-Risiko" },
+        { value: "8-12", color: "#FF0000", label: "Kritisch" },
+        { value: "> 12", color: "#AA0000", label: "Massensterben" }
+      ]
     }
   }
 };
 
-/**
- * OpenStreetMap Overpass API Queries (OPTIMIERT)
- */
+// ============================================================================
+// POI KONFIGURATION
+// ============================================================================
+
 export const overpassQueries = {
   diveSites: `
     [out:json][timeout:25];
@@ -193,37 +154,23 @@ export const overpassQueries = {
   `
 };
 
-/**
- * Statische POI-Daten (Fallback)
- */
 export const staticPOIs = {
   diveSites: [
-    // Great Barrier Reef
     { name: "Great Barrier Reef - Agincourt Reef", lat: -16.0333, lon: 145.8167, region: "GBR" },
     { name: "Great Barrier Reef - Cod Hole", lat: -14.6667, lon: 145.6167, region: "GBR" },
     { name: "SS Yongala Wreck", lat: -19.3042, lon: 147.6167, region: "GBR" },
-
-    // Karibik
     { name: "Blue Hole, Belize", lat: 17.3167, lon: -87.5333, region: "Caribbean" },
     { name: "Cozumel, Mexico", lat: 20.5083, lon: -86.9458, region: "Caribbean" },
     { name: "Bonaire Marine Park", lat: 12.2019, lon: -68.2624, region: "Caribbean" },
-
-    // Rotes Meer
     { name: "SS Thistlegorm Wreck", lat: 27.8167, lon: 33.9167, region: "Red Sea" },
     { name: "Ras Mohammed", lat: 27.7333, lon: 34.2333, region: "Red Sea" },
     { name: "Blue Hole Dahab", lat: 28.5833, lon: 34.5167, region: "Red Sea" },
-
-    // Indopazifik
     { name: "Raja Ampat, Indonesia", lat: -0.2297, lon: 130.5178, region: "Indo-Pacific" },
     { name: "Komodo National Park", lat: -8.5500, lon: 119.4833, region: "Indo-Pacific" },
     { name: "Sipadan Island, Malaysia", lat: 4.1158, lon: 118.6283, region: "Indo-Pacific" },
     { name: "Tubbataha Reef, Philippines", lat: 8.8583, lon: 119.8167, region: "Indo-Pacific" },
-
-    // Malediven
     { name: "Maldives - North Male Atoll", lat: 4.3333, lon: 73.5333, region: "Maldives" },
     { name: "Maldives - South Ari Atoll", lat: 3.7500, lon: 72.8333, region: "Maldives" },
-
-    // Pazifik
     { name: "Palau - Blue Corner", lat: 7.2431, lon: 134.2167, region: "Pacific" },
     { name: "Fiji - Rainbow Reef", lat: -16.7167, lon: 179.3333, region: "Pacific" },
     { name: "Galapagos Islands", lat: -0.9538, lon: -90.9656, region: "Pacific" }
@@ -241,9 +188,10 @@ export const staticPOIs = {
   ]
 };
 
-/**
- * Map-Einstellungen
- */
+// ============================================================================
+// MAP EINSTELLUNGEN
+// ============================================================================
+
 export const mapConfig = {
   center: [-5, 120],
   zoom: 4,
@@ -252,12 +200,7 @@ export const mapConfig = {
   worldCopyJump: false
 };
 
-/**
- * Performance-Einstellungen
- */
 export const performanceConfig = {
-  throttleDelay: 800,
-  maxPixels: 1024,
-  minBboxSize: 1.0,
-  debounceDelay: 1000
+  debounceDelay: 300,
+  minBboxSize: 1.0
 };
