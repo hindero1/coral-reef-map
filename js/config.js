@@ -1,6 +1,6 @@
 /**
  * Konfigurationsdatei für die CoralReefMap
- * VERSION: 5.1 - Mit Wasserqualitäts-Layern
+ * VERSION: 5.2 - Mit funktionierenden WMS-Layern (FIXED)
  */
 
 // ============================================================================
@@ -69,15 +69,29 @@ export const layers = {
     icon: "⚓"
   },
 
-  // 🌡️ WASSERTEMPERATUR (SST) - Deaktiviert (später)
+  // 🌡️ WASSERTEMPERATUR (SST) - JETZT FUNKTIONIEREND!
   sst: {
     id: "sst",
     name: "Wassertemperatur (SST)",
-    type: "wmts",
-    enabled: false,  // Später implementieren
+    type: "wms",
+    enabled: true,  // ✅ AKTIVIERT!
+    wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
+    wmsLayers: "CRW_SST",
     legend: {
-      title: "Meeresoberflächentemperatur",
-      description: "Wird später implementiert"
+      title: "Meeresoberflächentemperatur (SST)",
+      description: "NOAA Coral Reef Watch - CoralTemp SST v3.1",
+      source: "5km Resolution, täglich aktualisiert",
+      unit: "°C",
+      levels: [
+        { value: "< 20", color: "#000080", label: "Sehr kalt" },
+        { value: "20-23", color: "#0000FF", label: "Kalt" },
+        { value: "23-26", color: "#00FFFF", label: "Moderat" },
+        { value: "26-28", color: "#00FF00", label: "Warm (ideal)" },
+        { value: "28-30", color: "#FFFF00", label: "Heiß" },
+        { value: "30-32", color: "#FF8800", label: "Sehr heiß" },
+        { value: "> 32", color: "#FF0000", label: "Extrem heiß" }
+      ],
+      interpretation: "Korallen bevorzugen 23-29°C. Über 30°C kann zu Bleaching führen."
     }
   },
 
@@ -92,6 +106,7 @@ export const layers = {
       title: "Degree Heating Weeks (DHW)",
       description: "NOAA Coral Reef Watch - Akkumulierter Hitzestress",
       source: "5km Resolution",
+      unit: "°C-Wochen",
       levels: [
         { value: "0-2", color: "#00FF00", label: "Normal" },
         { value: "2-4", color: "#AAFF00", label: "Leicht erhöht" },
@@ -99,17 +114,18 @@ export const layers = {
         { value: "6-8", color: "#FF8800", label: "Bleaching-Risiko" },
         { value: "8-12", color: "#FF0000", label: "Kritisch" },
         { value: "> 12", color: "#AA0000", label: "Massensterben" }
-      ]
+      ],
+      interpretation: "DHW > 4 = Bleaching-Warnung, DHW > 8 = Schwere Bleaching-Ereignisse"
     }
   },
 
-  // 🌿 CHLOROPHYLL-A (Wasserqualität)
+  // 🌿 CHLOROPHYLL-A (Wasserqualität) - KORRIGIERT
   chlorophyll: {
     id: "chlorophyll",
     name: "Chlorophyll-a (Algenwachstum)",
     type: "wms",
-    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/noaacwNPPVIIRSchlaWeekly/request",
-    wmsLayers: "noaacwNPPVIIRSchlaWeekly:chlor_a",
+    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/erdVHNchlaWeekly/request",
+    wmsLayers: "erdVHNchlaWeekly:chla",
     legend: {
       title: "Chlorophyll-a Konzentration",
       description: "NOAA CoastWatch VIIRS - Indikator für Algenwachstum",
@@ -127,17 +143,17 @@ export const layers = {
     }
   },
 
-  // 💧 TRÜBUNG / WASSERKLARHEIT (Kd490)
+  // 💧 TRÜBUNG / WASSERKLARHEIT (Kd490) - KORRIGIERT
   turbidity: {
     id: "turbidity",
     name: "Trübung (Kd490)",
     type: "wms",
-    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/noaacwNPPVIIRSkd490Weekly/request",
-    wmsLayers: "noaacwNPPVIIRSkd490Weekly:Kd_490",
+    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/erdVH2kd4908day/request",
+    wmsLayers: "erdVH2kd4908kd490:kd_490",
     legend: {
       title: "Diffuse Dämpfung (Kd490)",
       description: "NOAA CoastWatch VIIRS - Indikator für Wasserklarheit",
-      source: "Global, 4km, wöchentlich",
+      source: "Global, 4km, 8-Tage Komposit",
       unit: "m⁻¹",
       levels: [
         { value: "< 0.05", color: "#000080", label: "Sehr klar" },

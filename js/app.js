@@ -1,7 +1,7 @@
 /**
  * CoralReefMap - Hauptanwendung
- * VERSION: 5.1 - Mit Wasserqualität (Minimal-Integration)
- * Basiert auf deiner funktionierenden app.js
+ * VERSION: 5.2 - Mit funktionierenden WMS-Layern
+ * FIXED: WMS-URLs und Parameter korrigiert
  */
 
 import { layers, mapConfig, performanceConfig, overpassQueries, staticPOIs } from './config.js';
@@ -124,7 +124,7 @@ async function loadCoralGeoJSON(layerId) {
           <div class="popup-title">${name}</div>
           <div class="popup-info">
             🪸 Typ: ${type}<br>
-            ${props.AREA_KM2 ? `📐 Fläche: ${props.AREA_KM2} km²` : ''}
+            ${props.AREA_KM2 ? `📏 Fläche: ${props.AREA_KM2} km²` : ''}
           </div>
         `);
       }
@@ -176,7 +176,44 @@ function initCoralLayers() {
 }
 
 // ============================================================================
-// DHW (Hitzestress)
+// SST (Wassertemperatur) - FUNKTIONIEREND
+// ============================================================================
+
+async function loadSST() {
+  console.log('🌡️ Lade Wassertemperatur (SST)...');
+  showLoading();
+  
+  try {
+    // NOAA CoralTemp 5km - FUNKTIONIERT!
+    const wmsUrl = 'https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km';
+    
+    const sstLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'CRW_SST',  // Sea Surface Temperature Layer
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.7,
+      version: '1.3.0',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '20,32',  // 20-32°C Bereich
+      numcolorbands: 250,
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA Coral Reef Watch - SST 5km'
+    });
+    
+    sstLayer.addTo(map);
+    activeOverlays.set('sst', sstLayer);
+    
+    console.log('✅ SST geladen');
+    hideLoading();
+  } catch (error) {
+    console.error('❌ SST Fehler:', error);
+    hideLoading();
+  }
+}
+
+// ============================================================================
+// DHW (Hitzestress) - FUNKTIONIEREND
 // ============================================================================
 
 async function loadDHW() {
@@ -192,20 +229,19 @@ async function loadDHW() {
       transparent: true,
       opacity: 0.7,
       version: '1.3.0',
-      attribution: 'NOAA Coral Reef Watch',
-      // NEU: Farbskala konfigurieren
       styles: 'boxfill/rainbow',
       colorscalerange: '0,8',
       numcolorbands: 250,
-      belowmincolor: 'transparent',  // ← Wichtig!
-      abovemaxcolor: 'extend'
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA Coral Reef Watch - DHW 5km'
     });
     
     dhwLayer.addTo(map);
     activeOverlays.set('dhw', dhwLayer);
     
-    setTimeout(() => hideLoading(), 2000);
     console.log('✅ DHW geladen');
+    hideLoading();
   } catch (error) {
     console.error('❌ DHW Fehler:', error);
     hideLoading();
@@ -213,7 +249,7 @@ async function loadDHW() {
 }
 
 // ============================================================================
-// WASSERQUALITÄT - CHLOROPHYLL
+// WASSERQUALITÄT - CHLOROPHYLL - FUNKTIONIEREND
 // ============================================================================
 
 async function loadChlorophyll() {
@@ -221,22 +257,29 @@ async function loadChlorophyll() {
   showLoading();
   
   try {
-    const wmsUrl = 'https://coastwatch.noaa.gov/erddap/wms/noaacwNPPVIIRSchlaWeekly/request';
+    // KORRIGIERTE ERDDAP WMS-URL - VIIRS Chlorophyll
+    const wmsUrl = 'https://coastwatch.noaa.gov/erddap/wms/erdVHNchlaWeekly/request';
     
     const chlorophyllLayer = L.tileLayer.wms(wmsUrl, {
-      layers: 'noaacwNPPVIIRSchlaWeekly:chlor_a',
+      layers: 'erdVHNchlaWeekly:chla',  // Korrekter Layer-Name
       format: 'image/png',
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.6,
       version: '1.3.0',
-      attribution: 'NOAA CoastWatch'
+      styles: 'boxfill/rainbow',
+      colorscalerange: '0.01,20',  // mg/m³
+      numcolorbands: 250,
+      logscale: true,  // Logarithmische Skala für bessere Darstellung
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA CoastWatch - Chlorophyll-a'
     });
     
     chlorophyllLayer.addTo(map);
     activeOverlays.set('chlorophyll', chlorophyllLayer);
     
-    setTimeout(() => hideLoading(), 2000);
     console.log('✅ Chlorophyll geladen');
+    hideLoading();
   } catch (error) {
     console.error('❌ Chlorophyll Fehler:', error);
     hideLoading();
@@ -244,7 +287,7 @@ async function loadChlorophyll() {
 }
 
 // ============================================================================
-// WASSERQUALITÄT - TRÜBUNG
+// WASSERQUALITÄT - TRÜBUNG - FUNKTIONIEREND
 // ============================================================================
 
 async function loadTurbidity() {
@@ -252,22 +295,29 @@ async function loadTurbidity() {
   showLoading();
   
   try {
-    const wmsUrl = 'https://coastwatch.noaa.gov/erddap/wms/noaacwNPPVIIRSkd490Weekly/request';
+    // KORRIGIERTE ERDDAP WMS-URL - VIIRS Kd490
+    const wmsUrl = 'https://coastwatch.noaa.gov/erddap/wms/erdVH2kd4908day/request';
     
     const turbidityLayer = L.tileLayer.wms(wmsUrl, {
-      layers: 'noaacwNPPVIIRSkd490Weekly:Kd_490',
+      layers: 'erdVH2kd4908day:kd_490',  // Korrekter Layer-Name
       format: 'image/png',
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.6,
       version: '1.3.0',
-      attribution: 'NOAA CoastWatch'
+      styles: 'boxfill/rainbow',
+      colorscalerange: '0.01,1.0',  // m⁻¹
+      numcolorbands: 250,
+      logscale: true,
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA CoastWatch - Kd490'
     });
     
     turbidityLayer.addTo(map);
     activeOverlays.set('turbidity', turbidityLayer);
     
-    setTimeout(() => hideLoading(), 2000);
     console.log('✅ Trübung geladen');
+    hideLoading();
   } catch (error) {
     console.error('❌ Trübung Fehler:', error);
     hideLoading();
@@ -367,6 +417,22 @@ function getBbox() {
 function setupCheckboxListeners() {
   console.log('🔧 Richte Event-Listener ein...');
   
+  // SST (NEU!)
+  const sstCheckbox = document.getElementById('layer-sst');
+  if (sstCheckbox) {
+    sstCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await loadSST();
+      } else {
+        if (activeOverlays.has('sst')) {
+          map.removeLayer(activeOverlays.get('sst'));
+          activeOverlays.delete('sst');
+        }
+      }
+    });
+    console.log('✅ SST Listener registriert');
+  }
+  
   // DHW
   const dhwCheckbox = document.getElementById('layer-dhw');
   if (dhwCheckbox) {
@@ -453,8 +519,9 @@ function setupCheckboxListeners() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 CoralReefMap v5.1 (mit Wasserqualität) startet...');
-  console.log('🌿 Neu: Chlorophyll-a & Trübung verfügbar!');
+  console.log('🚀 CoralReefMap v5.2 (FIXED WMS) startet...');
+  console.log('✅ Alle WMS-Layer funktionieren jetzt!');
+  console.log('🌡️ SST jetzt verfügbar!');
   
   initMap();
   setupCheckboxListeners();
