@@ -1,6 +1,6 @@
 /**
  * Konfigurationsdatei für die CoralReefMap
- * VERSION: 5.0 - WMS/WMTS Integration
+ * VERSION: 5.1 - Mit Wasserqualitäts-Layern
  */
 
 // ============================================================================
@@ -69,31 +69,15 @@ export const layers = {
     icon: "⚓"
   },
 
-  // 🌡️ WASSERTEMPERATUR (SST) - WMS/WMTS
+  // 🌡️ WASSERTEMPERATUR (SST) - Deaktiviert (später)
   sst: {
     id: "sst",
     name: "Wassertemperatur (SST)",
-    type: "wmts",  // WMS/WMTS Layer
-    
-    // NASA GIBS (Primary)
-    wmtsUrl: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily",
-    
-    // ERDDAP WMS (Fallback)
-    wmsUrl: "https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request",
-    wmsLayers: "jplMURSST41:analysed_sst",
-    
+    type: "wmts",
+    enabled: false,  // Später implementieren
     legend: {
       title: "Meeresoberflächentemperatur",
-      description: "NASA GIBS - Täglich aktualisierte Satellitendaten",
-      source: "MODIS Aqua L3 SST (4km)",
-      levels: [
-        { value: "< 10°C", color: "#0000FF", label: "Sehr kalt (Polar)" },
-        { value: "10-15°C", color: "#00FFFF", label: "Kalt" },
-        { value: "15-20°C", color: "#00FF00", label: "Kühl" },
-        { value: "20-25°C", color: "#FFFF00", label: "Gemäßigt" },
-        { value: "25-28°C", color: "#FF8800", label: "Warm (Optimal)" },
-        { value: "> 28°C", color: "#FF0000", label: "Heiß (Bleaching-Risiko)" }
-      ]
+      description: "Wird später implementiert"
     }
   },
 
@@ -101,12 +85,9 @@ export const layers = {
   dhw: {
     id: "dhw",
     name: "Hitzestress (DHW)",
-    type: "wms",  // WMS Layer
-    
-    // NOAA Coral Reef Watch
+    type: "wms",
     wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
     wmsLayers: "CRW_DHW",
-    
     legend: {
       title: "Degree Heating Weeks (DHW)",
       description: "NOAA Coral Reef Watch - Akkumulierter Hitzestress",
@@ -119,6 +100,54 @@ export const layers = {
         { value: "8-12", color: "#FF0000", label: "Kritisch" },
         { value: "> 12", color: "#AA0000", label: "Massensterben" }
       ]
+    }
+  },
+
+  // 🌿 CHLOROPHYLL-A (Wasserqualität)
+  chlorophyll: {
+    id: "chlorophyll",
+    name: "Chlorophyll-a (Algenwachstum)",
+    type: "wms",
+    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/noaacwNPPVIIRSchlaWeekly/request",
+    wmsLayers: "noaacwNPPVIIRSchlaWeekly:chlor_a",
+    legend: {
+      title: "Chlorophyll-a Konzentration",
+      description: "NOAA CoastWatch VIIRS - Indikator für Algenwachstum",
+      source: "Global, 4km, wöchentlich",
+      unit: "mg/m³",
+      levels: [
+        { value: "< 0.1", color: "#000080", label: "Sehr niedrig (oligotroph)" },
+        { value: "0.1-0.3", color: "#0000FF", label: "Niedrig" },
+        { value: "0.3-1.0", color: "#00FFFF", label: "Mäßig" },
+        { value: "1.0-3.0", color: "#00FF00", label: "Erhöht" },
+        { value: "3.0-10", color: "#FFFF00", label: "Hoch (eutroph)" },
+        { value: "> 10", color: "#FF0000", label: "Sehr hoch (Algenblüte)" }
+      ],
+      interpretation: "Hohe Werte können auf Eutrophierung (Überdüngung) hinweisen"
+    }
+  },
+
+  // 💧 TRÜBUNG / WASSERKLARHEIT (Kd490)
+  turbidity: {
+    id: "turbidity",
+    name: "Trübung (Kd490)",
+    type: "wms",
+    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/noaacwNPPVIIRSkd490Weekly/request",
+    wmsLayers: "noaacwNPPVIIRSkd490Weekly:Kd_490",
+    legend: {
+      title: "Diffuse Dämpfung (Kd490)",
+      description: "NOAA CoastWatch VIIRS - Indikator für Wasserklarheit",
+      source: "Global, 4km, wöchentlich",
+      unit: "m⁻¹",
+      levels: [
+        { value: "< 0.05", color: "#000080", label: "Sehr klar" },
+        { value: "0.05-0.1", color: "#0000FF", label: "Klar" },
+        { value: "0.1-0.2", color: "#00FFFF", label: "Mäßig klar" },
+        { value: "0.2-0.5", color: "#00FF00", label: "Trüb" },
+        { value: "0.5-1.0", color: "#FFFF00", label: "Sehr trüb" },
+        { value: "> 1.0", color: "#FF0000", label: "Extrem trüb" }
+      ],
+      interpretation: "Hohe Werte = schlechte Sicht, mehr Sedimente/Partikel im Wasser"
     }
   }
 };

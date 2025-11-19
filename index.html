@@ -42,31 +42,32 @@
                 <h3>🌡️ Umweltdaten (ERDDAP)</h3>
                 <div class="layer-control">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="layer-sst" checked>
+                        <input type="checkbox" id="layer-sst">
                         <span>Wassertemperatur (SST)</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="layer-dhw">
                         <span>Hitzestress (DHW)</span>
                     </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="layer-sst-anom">
-                        <span>SST Anomalie</span>
-                    </label>
                 </div>
             </div>
 
+            <!-- NEU: Wasserqualität -->
             <div class="panel">
-                <h3>🌊 Wasserqualität</h3>
+                <h3>💧 Wasserqualität</h3>
                 <div class="layer-control">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="layer-chla">
-                        <span>Chlorophyll-a (Algenwachstum)</span>
+                        <input type="checkbox" id="layer-chlorophyll">
+                        <span>🌿 Chlorophyll-a</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="layer-turbidity">
-                        <span>Trübung (Kd490)</span>
+                        <span>💧 Trübung (Kd490)</span>
                     </label>
+                </div>
+                <div style="margin-top: 0.5rem; padding: 0.5rem; background: #e7f3ff; border-radius: 4px; font-size: 0.75rem; color: #333;">
+                    <strong>Chlorophyll-a:</strong> Algenwachstum<br>
+                    <strong>Trübung:</strong> Wasserklarheit
                 </div>
             </div>
 
@@ -86,7 +87,7 @@
                 <!-- Debug Helper -->
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
                     <button id="test-cairns" style="width: 100%; padding: 8px; margin-bottom: 5px; background: #1e3c72; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
-                        🧪 Test: Cairns (OSM-Daten)
+                        🧪 Test: Cairns (GBR)
                     </button>
                     <button id="test-sharm" style="width: 100%; padding: 8px; background: #1e3c72; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         🧪 Test: Sharm el-Sheikh
@@ -100,11 +101,11 @@
                     <p class="legend-placeholder">Wähle einen Layer aus um Details zu sehen</p>
                 </div>
                 
-                <!-- Cache Info -->
+                <!-- Info -->
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ddd;">
                     <small style="color: #666;">
-                        <strong>💾 Cache-System aktiv</strong><br>
-                        ERDDAP-Daten werden 24h zwischengespeichert für schnelleres Laden
+                        <strong>🌍 Globale Abdeckung</strong><br>
+                        WMS-Layer für Echtzeit-Daten
                     </small>
                 </div>
             </div>
@@ -124,6 +125,9 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Leaflet Heatmap Plugin -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     
     <!-- Custom JS -->
     <script type="module" src="js/app.js"></script>
