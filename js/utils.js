@@ -195,12 +195,20 @@ export function updateLegend(layerConfig) {
   const legendContent = document.getElementById('legend-content');
   if (!legendContent || !layerConfig || !layerConfig.legend) return;
 
-  const { title, description, range, levels, color } = layerConfig.legend;
+  const { title, description, source, unit, range, levels, color, interpretation } = layerConfig.legend;
 
   let html = `<div class="legend-item"><strong>${title}</strong></div>`;
 
   if (description) {
-    html += `<div class="legend-item" style="font-size: 0.8rem; color: #666;">${description}</div>`;
+    html += `<div class="legend-item" style="font-size: 0.8rem; color: #666; margin-top: 0.3rem;">${description}</div>`;
+  }
+
+  if (source) {
+    html += `<div class="legend-item" style="font-size: 0.75rem; color: #999; margin-top: 0.2rem;">📊 ${source}</div>`;
+  }
+
+  if (unit) {
+    html += `<div class="legend-item" style="font-size: 0.8rem; color: #555; margin-top: 0.3rem;"><strong>Einheit:</strong> ${unit}</div>`;
   }
 
   if (range) {
@@ -211,9 +219,9 @@ export function updateLegend(layerConfig) {
     html += '<div style="margin-top: 0.75rem;">';
     levels.forEach(level => {
       html += `
-        <div class="legend-item">
-          <span class="legend-color" style="background: ${level.color};"></span>
-          ${level.value}: ${level.label}
+        <div class="legend-item" style="margin-bottom: 0.4rem;">
+          <span class="legend-color" style="background: ${level.color}; display: inline-block; width: 20px; height: 12px; margin-right: 8px; border: 1px solid #ccc; vertical-align: middle;"></span>
+          <span style="font-size: 0.85rem;"><strong>${level.value}:</strong> ${level.label}</span>
         </div>
       `;
     });
@@ -227,6 +235,10 @@ export function updateLegend(layerConfig) {
         Riff-Gebiete
       </div>
     `;
+  }
+
+  if (interpretation) {
+    html += `<div class="legend-item" style="font-size: 0.75rem; color: #666; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee;"><strong>💡 Info:</strong> ${interpretation}</div>`;
   }
 
   legendContent.innerHTML = html;

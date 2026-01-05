@@ -204,6 +204,8 @@ async function loadSST() {
     sstLayer.addTo(map);
     activeOverlays.set('sst', sstLayer);
     
+    updateLegend(layers['sst']);
+    
     console.log('✅ SST geladen');
     hideLoading();
   } catch (error) {
@@ -239,6 +241,8 @@ async function loadDHW() {
     
     dhwLayer.addTo(map);
     activeOverlays.set('dhw', dhwLayer);
+    
+    updateLegend(layers['dhw']);
     
     console.log('✅ DHW geladen');
     hideLoading();
@@ -278,6 +282,8 @@ async function loadChlorophyll() {
     chlorophyllLayer.addTo(map);
     activeOverlays.set('chlorophyll', chlorophyllLayer);
     
+    updateLegend(layers['chlorophyll']);
+    
     console.log('✅ Chlorophyll geladen');
     hideLoading();
   } catch (error) {
@@ -315,6 +321,8 @@ async function loadTurbidity() {
     
     turbidityLayer.addTo(map);
     activeOverlays.set('turbidity', turbidityLayer);
+    
+    updateLegend(layers['turbidity']);
     
     console.log('✅ Trübung geladen');
     hideLoading();

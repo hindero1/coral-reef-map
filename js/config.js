@@ -99,19 +99,19 @@ export const layers = {
     wmsLayers: "CRW_SST",
     legend: {
       title: "Meeresoberflächentemperatur (SST)",
-      description: "NOAA Coral Reef Watch - CoralTemp SST v3.1",
-      source: "5km Resolution, täglich aktualisiert",
-      unit: "°C",
+      description: "NOAA Coral Reef Watch - CoralTemp SST v3.1 | Satellitendaten, täglich aktualisiert",
+      source: "5km Resolution, Oberfläche (0-5m Tiefe)",
+      unit: "°C (Grad Celsius)",
       levels: [
-        { value: "< 20", color: "#000080", label: "Sehr kalt" },
-        { value: "20-23", color: "#0000FF", label: "Kalt" },
-        { value: "23-26", color: "#00FFFF", label: "Moderat" },
-        { value: "26-28", color: "#00FF00", label: "Warm (ideal)" },
-        { value: "28-30", color: "#FFFF00", label: "Heiß" },
-        { value: "30-32", color: "#FF8800", label: "Sehr heiß" },
-        { value: "> 32", color: "#FF0000", label: "Extrem heiß" }
+        { value: "< 20", color: "#000080", label: "< 20°C - Zu kalt für tropische Korallen ❄️" },
+        { value: "20-23", color: "#0000FF", label: "20-23°C - Untere Grenze 🌊" },
+        { value: "23-26", color: "#00FFFF", label: "23-26°C - Optimal für Korallenwachstum ✅" },
+        { value: "26-28", color: "#00FF00", label: "26-28°C - IDEAL für Korallen ✅" },
+        { value: "28-30", color: "#FFFF00", label: "28-30°C - Obere Grenze - Stress beginnt ⚠️" },
+        { value: "30-32", color: "#FF8800", label: "30-32°C - Bleaching-Risiko! 🚨" },
+        { value: "> 32", color: "#FF0000", label: "> 32°C - KRITISCH - Massenbleiche 💀" }
       ],
-      interpretation: "Korallen bevorzugen 23-29°C. Über 30°C kann zu Bleaching führen."
+      interpretation: "GRÜN (26-28°C) = Perfekt | GELB (28-30°C) = Grenzbereich | ROT (>30°C) = Gefahr für Korallen!"
     }
   },
 
@@ -196,18 +196,19 @@ export const layers = {
     wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
     wmsLayers: "CRW_BAA",
     legend: {
-      title: "Wasserqualität (Bleaching Alert Area)",
-      description: "NOAA Coral Reef Watch - Kombinierter Wasserqualitäts-Indikator",
+      title: "Bleaching Alert Area (BAA)",
+      description: "NOAA Coral Reef Watch - Warnsystem für Korallenbleiche",
       source: "5km Resolution, täglich aktualisiert",
       unit: "Alert Level",
       levels: [
-        { value: "0", color: "#00FF00", label: "Keine Warnung - Gut" },
+        { value: "Blau", color: "#0066CC", label: "Keine Daten / Normal - Sicher ✓" },
+        { value: "0", color: "#00FF00", label: "No Stress - Optimal" },
         { value: "1", color: "#FFFF00", label: "Watch - Beobachten" },
-        { value: "2", color: "#FF8800", label: "Warning - Warnung" },
-        { value: "3", color: "#FF0000", label: "Alert Level 1" },
-        { value: "4", color: "#AA0000", label: "Alert Level 2" }
+        { value: "2", color: "#FF8800", label: "Warning - Bleiche möglich" },
+        { value: "3", color: "#FF0000", label: "Alert Level 1 - Bleiche wahrscheinlich" },
+        { value: "4", color: "#AA0000", label: "Alert Level 2 - Massensterben" }
       ],
-      interpretation: "Zeigt kombinierte Stress-Faktoren für Korallen (Temperatur, Licht, Wasserqualität)"
+      interpretation: "Kombiniert Temperatur + Hitzestress + Licht. BLAU = GUT (keine Gefahr), ROT = GEFAHR (Bleiche)"
     }
   }
 };
