@@ -72,6 +72,24 @@ function initMap() {
   }).addTo(map);
 
   initCoralLayers();
+  
+  // Zoom-Event-Listener für Häfen
+  map.on('zoomend', () => {
+    const currentZoom = map.getZoom();
+    const minZoomHarbours = layers['harbours'].minZoom || 5;
+    
+    // Automatisch ausblenden wenn zu weit herausgezoomt
+    if (currentZoom < minZoomHarbours && activeOverlays.has('harbours')) {
+      map.removeLayer(activeOverlays.get('harbours'));
+      activeOverlays.delete('harbours');
+      
+      const checkbox = document.getElementById('layer-harbours');
+      if (checkbox) checkbox.checked = false;
+      
+      console.log(`ℹ️ Häfen automatisch ausgeblendet (Zoom ${currentZoom} < ${minZoomHarbours})`);
+    }
+  });
+  
   console.log('✅ Map initialisiert');
 }
 
@@ -117,25 +135,30 @@ async function loadCoralGeoJSON(layerId) {
           });
         }
         
-        // Häfen mit Icon
+        // Häfen mit kleinerem, transparentem Icon
         if (layerId === 'harbours' && layerConfig.icon) {
+          const iconSize = layerConfig.iconSize || 12;  // Viel kleiner (war 18-20)
           const icon = L.divIcon({
-            html: `<div style="font-size: 18px; text-shadow: 0 0 3px white;">${layerConfig.icon}</div>`,
+            html: `<div style="
+              font-size: ${iconSize}px; 
+              opacity: 0.6;
+              text-shadow: 0 0 2px white;
+            ">${layerConfig.icon}</div>`,
             className: '',
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
+            iconSize: [iconSize, iconSize],
+            iconAnchor: [iconSize / 2, iconSize / 2]
           });
           return L.marker(latlng, { icon });
         }
         
-        // Standard CircleMarker
+        // Alle anderen Layer: CircleMarker
         return L.circleMarker(latlng, {
-          radius: layerConfig.style.radius || 1.5,
+          radius: layerConfig.style.radius || 3,
           fillColor: layerConfig.style.fillColor,
-          color: layerConfig.style.fillColor,
-          weight: 0.5,
+          color: layerConfig.style.color,
+          weight: 1,
           opacity: 0.8,
-          fillOpacity: 0.6
+          fillOpacity: layerConfig.style.fillOpacity || 0.7
         });
       },
       
@@ -467,7 +490,7 @@ async function loadIncidents() {
 }
 
 // ============================================================================
-// TAUCHSPOTS (OVERPASS API) - NEU
+// TAUCHSPOTS (STATISCHE DATEN) - ÜBERARBEITET
 // ============================================================================
 
 async function loadDiveSites() {
@@ -475,7 +498,78 @@ async function loadDiveSites() {
   showLoading();
   
   try {
-    const apiUrl = "https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node[%22sport%22=%22scuba_diving%22];way[%22sport%22=%22scuba_diving%22];relation[%22sport%22=%22scuba_diving%22];);out%20geom;";
+    // Zoom-Level prüfen - Overpass API nur bei gutem Zoom
+    const currentZoom = map.getZoom();
+    const minZoomForOverpass = 6;  // Mindest-Zoom für Overpass API
+    
+    // Wenn zu weit herausgezoomt: Verwende statische POIs
+    if (currentZoom < minZoomForOverpass) {
+      console.log(`ℹ️ Zoom-Level ${currentZoom} zu niedrig für Overpass API (min: ${minZoomForOverpass})`);
+      console.log('📍 Verwende statische Tauchspots...');
+      
+      // Lade statische Tauchspots aus config.js
+      const diveSites = staticPOIs.diveSites;
+      
+      if (!diveSites || diveSites.length === 0) {
+        alert('ℹ️ Keine Tauchspots verfügbar.\n\nBitte zoomen Sie näher heran (Zoom > 6) um OpenStreetMap-Daten zu laden.');
+        hideLoading();
+        return;
+      }
+      
+      // Erstelle Marker für statische POIs
+      const markers = diveSites.map(site => {
+        const icon = L.divIcon({
+          html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">🤿</div>`,
+          className: '',
+          iconSize: [25, 25],
+          iconAnchor: [12, 12]
+        });
+        
+        const marker = L.marker([site.lat, site.lon], { icon });
+        
+        let popupHTML = `
+          <div class="popup-title">🤿 ${site.name}</div>
+          <div class="popup-info">
+            🌍 Region: ${site.region}<br>
+            <small>📍 ${site.lat.toFixed(4)}, ${site.lon.toFixed(4)}</small><br>
+            <small style="color: #999;">Beliebter Tauchspot</small><br>
+            <small style="color: #666;">💡 Zoom > 6 für mehr Details</small>
+          </div>
+        `;
+        
+        marker.bindPopup(popupHTML);
+        return marker;
+      });
+      
+      const layerGroup = L.layerGroup(markers);
+      layerGroup.addTo(map);
+      activeOverlays.set('dive-sites', layerGroup);
+      
+      updateLegend(layers['dive-sites']);
+      
+      console.log(`✅ ${markers.length} statische Tauchspots geladen`);
+      hideLoading();
+      return;
+    }
+    
+    // Bei gutem Zoom: Versuche Overpass API mit Bounding Box
+    console.log('📡 Zoom-Level ausreichend, verwende Overpass API...');
+    
+    const bounds = map.getBounds();
+    const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+    
+    const query = `[out:json][timeout:25];
+      (
+        node["sport"="scuba_diving"](${bbox});
+        node["sport"="diving"](${bbox});
+        node["leisure"="dive_centre"](${bbox});
+        way["sport"="scuba_diving"](${bbox});
+        way["sport"="diving"](${bbox});
+        relation["sport"="scuba_diving"](${bbox});
+      );
+      out center;`;
+    
+    const apiUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
     
     console.log('📡 Rufe Overpass API auf...');
     const response = await fetch(apiUrl);
@@ -485,15 +579,56 @@ async function loadDiveSites() {
     }
     
     const data = await response.json();
-    console.log(`✅ ${data.elements?.length || 0} Tauchspots gefunden`);
+    console.log(`✅ ${data.elements?.length || 0} Tauchspots von Overpass gefunden`);
     
     if (!data.elements || data.elements.length === 0) {
-      alert('ℹ️ Keine Tauchspots gefunden in den aktuellen Daten.\n\nDie Overpass API liefert weltweite Daten zurück.');
+      console.log('ℹ️ Keine Overpass-Daten im aktuellen Bereich');
+      
+      // Fallback zu statischen POIs im sichtbaren Bereich
+      const visiblePOIs = staticPOIs.diveSites.filter(site => {
+        return site.lat >= bounds.getSouth() && 
+               site.lat <= bounds.getNorth() &&
+               site.lon >= bounds.getWest() && 
+               site.lon <= bounds.getEast();
+      });
+      
+      if (visiblePOIs.length > 0) {
+        console.log(`📍 Zeige ${visiblePOIs.length} statische POIs im Bereich`);
+        
+        const markers = visiblePOIs.map(site => {
+          const icon = L.divIcon({
+            html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">🤿</div>`,
+            className: '',
+            iconSize: [25, 25],
+            iconAnchor: [12, 12]
+          });
+          
+          const marker = L.marker([site.lat, site.lon], { icon });
+          marker.bindPopup(`
+            <div class="popup-title">🤿 ${site.name}</div>
+            <div class="popup-info">
+              🌍 Region: ${site.region}<br>
+              <small>📍 ${site.lat.toFixed(4)}, ${site.lon.toFixed(4)}</small>
+            </div>
+          `);
+          return marker;
+        });
+        
+        const layerGroup = L.layerGroup(markers);
+        layerGroup.addTo(map);
+        activeOverlays.set('dive-sites', layerGroup);
+        updateLegend(layers['dive-sites']);
+        
+        hideLoading();
+        return;
+      }
+      
+      alert('ℹ️ Keine Tauchspots in diesem Bereich gefunden.');
       hideLoading();
       return;
     }
     
-    // Erstelle Marker für jeden Tauchspot
+    // Erstelle Marker für Overpass-Daten
     const markers = [];
     
     data.elements.forEach(element => {
@@ -507,11 +642,10 @@ async function loadDiveSites() {
         lat = element.center.lat;
         lon = element.center.lon;
       } else if (element.geometry && element.geometry.length > 0) {
-        // Für ways: ersten Punkt nehmen
         lat = element.geometry[0].lat;
         lon = element.geometry[0].lon;
       } else {
-        return; // Skip wenn keine Koordinaten
+        return;
       }
       
       // Marker erstellen
@@ -550,20 +684,22 @@ async function loadDiveSites() {
       markers.push(marker);
     });
     
-    console.log(`✅ ${markers.length} Tauchspot-Marker erstellt`);
-    
-    // Layer-Gruppe erstellen und zur Karte hinzufügen
     const layerGroup = L.layerGroup(markers);
     layerGroup.addTo(map);
     activeOverlays.set('dive-sites', layerGroup);
     
     updateLegend(layers['dive-sites']);
     
+    console.log(`✅ ${markers.length} Overpass Tauchspots zur Karte hinzugefügt`);
     hideLoading();
+    
   } catch (error) {
-    console.error('❌ Tauchspots Fehler:', error);
+    console.error('❌ Fehler beim Laden der Tauchspots:', error);
+    
+    // Zeige Fehlermeldung
+    alert(`Fehler beim Laden der Tauchspots!\n\nMögliche Gründe:\n- Overpass API nicht erreichbar\n- Timeout\n- Netzwerkfehler\n\nFehler: ${error.message}\n\nℹ️ Tipp: Zoomen Sie näher heran (Zoom > 6) und versuchen Sie es erneut.`);
+    
     hideLoading();
-    alert(`Fehler beim Laden der Tauchspots!\n\nMögliche Gründe:\n- Overpass API nicht erreichbar\n- Timeout\n- Netzwerkfehler\n\nFehler: ${error.message}`);
   }
 }
 
@@ -654,6 +790,134 @@ function getBbox() {
 }
 
 // ============================================================================
+// HÄFEN MIT ZOOM-CHECK UND CLUSTERING
+// ============================================================================
+
+async function loadHarboursWithZoomCheck() {
+  const currentZoom = map.getZoom();
+  const layerConfig = layers['harbours'];
+  const minZoom = layerConfig.minZoom || 5;
+  
+  if (currentZoom < minZoom) {
+    // Zu weit herausgezoomt
+    alert(`ℹ️ Häfen werden ab Zoom-Level ${minZoom} angezeigt.\n\nBitte zoomen Sie näher heran, um Häfen zu sehen.`);
+    
+    // Checkbox wieder ausschalten
+    const checkbox = document.getElementById('layer-harbours');
+    if (checkbox) checkbox.checked = false;
+    
+    return;
+  }
+  
+  // Zoom ist OK - lade Häfen mit Clustering
+  console.log('⚓ Lade Häfen mit Clustering...');
+  showLoading();
+  
+  try {
+    const response = await fetch(layerConfig.url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    const geojson = await response.json();
+    console.log(`✅ ${geojson.features?.length || 0} Häfen geladen`);
+    
+    // Sammle alle Marker
+    const markers = [];
+    
+    L.geoJSON(geojson, {
+      pointToLayer: (feature, latlng) => {
+        // Erstelle kleines, transparentes Icon
+        const iconSize = layerConfig.iconSize || 12;
+        const icon = L.divIcon({
+          html: `<div style="
+            font-size: ${iconSize}px; 
+            opacity: 0.7;
+            text-shadow: 0 0 2px white;
+          ">${layerConfig.icon}</div>`,
+          className: '',
+          iconSize: [iconSize, iconSize],
+          iconAnchor: [iconSize / 2, iconSize / 2]
+        });
+        
+        const marker = L.marker(latlng, { icon });
+        
+        // Popup
+        const props = feature.properties || {};
+        const name = props.PORT_NAME || props.name || 'Unbekannter Hafen';
+        const country = props.COUNTRY || props.country || '';
+        
+        let popupHTML = `<div class="popup-title">⚓ ${name}</div><div class="popup-info">`;
+        if (country) popupHTML += `🌍 ${country}<br>`;
+        popupHTML += `<small>📍 ${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}</small></div>`;
+        
+        marker.bindPopup(popupHTML);
+        
+        return marker;
+      },
+      onEachFeature: (feature, layer) => {
+        markers.push(layer);
+      }
+    });
+    
+    // Clustering aktivieren wenn konfiguriert
+    if (layerConfig.clustering && layerConfig.clustering.enabled) {
+      const clusterConfig = layerConfig.clustering;
+      
+      const clusterGroup = L.markerClusterGroup({
+        maxClusterRadius: clusterConfig.maxClusterRadius || 50,
+        spiderfyOnMaxZoom: clusterConfig.spiderfyOnMaxZoom !== false,
+        showCoverageOnHover: clusterConfig.showCoverageOnHover === true,
+        zoomToBoundsOnClick: clusterConfig.zoomToBoundsOnClick !== false,
+        disableClusteringAtZoom: clusterConfig.disableClusteringAtZoom || 8,
+        
+        // Custom Icon-Funktion für Cluster
+        iconCreateFunction: function(cluster) {
+          const count = cluster.getChildCount();
+          let size = 'small';
+          let className = 'marker-cluster-small';
+          
+          if (count >= 100) {
+            size = 'large';
+            className = 'marker-cluster-large';
+          } else if (count >= 10) {
+            size = 'medium';
+            className = 'marker-cluster-medium';
+          }
+          
+          return L.divIcon({
+            html: `<div><span>${count}</span></div>`,
+            className: 'marker-cluster ' + className,
+            iconSize: L.point(40, 40)
+          });
+        }
+      });
+      
+      // Füge alle Marker zum Cluster hinzu
+      markers.forEach(marker => clusterGroup.addLayer(marker));
+      
+      clusterGroup.addTo(map);
+      activeOverlays.set('harbours', clusterGroup);
+      
+      console.log(`✅ ${markers.length} Häfen mit Clustering geladen (Cluster bis Zoom ${clusterConfig.disableClusteringAtZoom || 8})`);
+    } else {
+      // Ohne Clustering - normale LayerGroup
+      const layerGroup = L.layerGroup(markers);
+      layerGroup.addTo(map);
+      activeOverlays.set('harbours', layerGroup);
+      
+      console.log(`✅ ${markers.length} Häfen geladen (ohne Clustering)`);
+    }
+    
+    updateLegend(layerConfig);
+    hideLoading();
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Häfen:', error);
+    alert(`Fehler beim Laden der Häfen!\n\nFehler: ${error.message}`);
+    hideLoading();
+  }
+}
+
+// ============================================================================
 // CHECKBOX EVENT HANDLERS
 // ============================================================================
 
@@ -740,12 +1004,12 @@ function setupCheckboxListeners() {
     console.log('✅ Wasserqualität Listener registriert');
   }
 
-  // Häfen
+  // Häfen (mit Zoom-Check)
   const harboursCheckbox = document.getElementById('layer-harbours');
   if (harboursCheckbox) {
     harboursCheckbox.addEventListener('change', (e) => {
       if (e.target.checked) {
-        loadCoralGeoJSON('harbours');
+        loadHarboursWithZoomCheck();
       } else {
         if (activeOverlays.has('harbours')) {
           map.removeLayer(activeOverlays.get('harbours'));
@@ -753,6 +1017,7 @@ function setupCheckboxListeners() {
         }
       }
     });
+    console.log('✅ Häfen Listener registriert');
   }
 
   // Tauchspots (NEU!)
