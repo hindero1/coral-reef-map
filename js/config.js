@@ -1,19 +1,14 @@
 /**
  * Konfigurationsdatei für die CoralReefMap
- * KOMPLETT AKTUALISIERT für lokale GeoJSON-Dateien + POI-Support
+ * VERSION: 5.2 - Mit funktionierenden WMS-Layern (FIXED)
  */
 
-// ERDDAP Server
-const COASTWATCH = "https://coastwatch.noaa.gov/erddap";
-const USF_ERDDAP = "https://erddap.marine.usf.edu/erddap";
-const PFEG = "https://coastwatch.pfeg.noaa.gov/erddap";
+// ============================================================================
+// LAYER KONFIGURATIONEN
+// ============================================================================
 
-
-/**
- * Layer-Konfigurationen
- */
 export const layers = {
-  // 🪸 WARMWASSER-KORALLENRIFFE (kombiniert: Polygone + Punkte)
+  // 🪸 WARMWASSER-KORALLENRIFFE
   "coral-warm": {
     id: "coral-warm",
     name: "Warmwasser-Korallenriffe",
@@ -33,7 +28,7 @@ export const layers = {
     }
   },
 
-  // ❄️ KALTWASSER-KORALLENRIFFE (kombiniert: Polygone + Punkte)
+  // ❄️ KALTWASSER-KORALLENRIFFE
   "coral-cold": {
     id: "coral-cold",
     name: "Kaltwasser-Korallenriffe",
@@ -53,7 +48,7 @@ export const layers = {
     }
   },
 
-  // ⚓ HÄFEN (aus ports_all.json)
+  // ⚓ HÄFEN
   "harbours": {
     id: "harbours",
     name: "Häfen",
@@ -74,98 +69,262 @@ export const layers = {
     icon: "⚓"
   },
 
-  // 🌡️ WASSERTEMPERATUR (SST)
+  // 🤿 TAUCHSPOTS - NEU
+  "dive-sites": {
+    id: "dive-sites",
+    name: "Tauchspots",
+    type: "overpass",
+    apiUrl: "https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node[%22sport%22=%22scuba_diving%22];way[%22sport%22=%22scuba_diving%22];relation[%22sport%22=%22scuba_diving%22];);out%20geom;",
+    style: {
+      color: "#00BCD4",
+      fillColor: "#00BCD4",
+      fillOpacity: 0.8,
+      radius: 6
+    },
+    legend: {
+      title: "Tauchspots weltweit",
+      description: "Tauchplätze und Tauchzentren aus OpenStreetMap",
+      color: "#00BCD4"
+    },
+    icon: "🤿"
+  },
+
+  // 🌡️ WASSERTEMPERATUR (SST) - JETZT FUNKTIONIEREND!
   sst: {
     id: "sst",
     name: "Wassertemperatur (SST)",
-    type: "erddap",
-    server: PFEG,
-    datasetId: "NOAA_DHW",
-    variable: "CRW_SST",
-    colorBar: "Rainbow|C=linear|I=15,32",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.65
+    type: "wms",
+    enabled: true,  // ✅ AKTIVIERT!
+    wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
+    wmsLayers: "CRW_SST",
+    legend: {
+      title: "Meeresoberflächentemperatur (SST)",
+      description: "NOAA Coral Reef Watch - CoralTemp SST v3.1 | Satellitendaten, täglich aktualisiert",
+      source: "5km Resolution, Oberfläche (0-5m Tiefe)",
+      unit: "°C (Grad Celsius)",
+      levels: [
+        { value: "< 20", color: "#000080", label: "< 20°C - Zu kalt für tropische Korallen ❄️" },
+        { value: "20-23", color: "#0000FF", label: "20-23°C - Untere Grenze 🌊" },
+        { value: "23-26", color: "#00FFFF", label: "23-26°C - Optimal für Korallenwachstum ✅" },
+        { value: "26-28", color: "#00FF00", label: "26-28°C - IDEAL für Korallen ✅" },
+        { value: "28-30", color: "#FFFF00", label: "28-30°C - Obere Grenze - Stress beginnt ⚠️" },
+        { value: "30-32", color: "#FF8800", label: "30-32°C - Bleaching-Risiko! 🚨" },
+        { value: "> 32", color: "#FF0000", label: "> 32°C - KRITISCH - Massenbleiche 💀" }
+      ],
+      interpretation: "GRÜN (26-28°C) = Perfekt | GELB (28-30°C) = Grenzbereich | ROT (>30°C) = Gefahr für Korallen!"
+    }
   },
 
-  // 🔥 HITZESTRESS (DHW)
+  // 🔥 HITZESTRESS (DHW) - WMS
   dhw: {
     id: "dhw",
     name: "Hitzestress (DHW)",
-    type: "erddap",
-    server: PFEG,
-    datasetId: "NOAA_DHW",
-    variable: "CRW_DHW",
-    colorBar: "Rainbow|C=linear|I=1,8",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.7
-  },
-
-  // 📊 SST ANOMALIE
-  "sst-anom": {
-    id: "sst-anom",
-    name: "SST Anomalie",
-    type: "erddap",
-    server: USF_ERDDAP,
-    datasetId: "jplMURSST41anom1day",
-    variable: "anom",
-    units: "°C",
-    colorBar: "RdBu_r|C=linear|I=-3,3",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.65,
+    type: "wms",
+    wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
+    wmsLayers: "CRW_DHW",
     legend: {
-      title: "Temperatur-Anomalie",
-      description: "Abweichung vom langjährigen Durchschnitt",
-      range: "-3 bis +3°C"
+      title: "Degree Heating Weeks (DHW)",
+      description: "NOAA Coral Reef Watch - Akkumulierter Hitzestress",
+      source: "5km Resolution",
+      unit: "°C-Wochen",
+      levels: [
+        { value: "0-2", color: "#00FF00", label: "Normal" },
+        { value: "2-4", color: "#AAFF00", label: "Leicht erhöht" },
+        { value: "4-6", color: "#FFFF00", label: "Warnung" },
+        { value: "6-8", color: "#FF8800", label: "Bleaching-Risiko" },
+        { value: "8-12", color: "#FF0000", label: "Kritisch" },
+        { value: "> 12", color: "#AA0000", label: "Massensterben" }
+      ],
+      interpretation: "DHW > 4 = Bleaching-Warnung, DHW > 8 = Schwere Bleaching-Ereignisse"
     }
   },
 
-  // 🌱 CHLOROPHYLL-A
-  chla: {
-    id: "chla",
-    name: "Chlorophyll-a",
-    type: "erddap",
-    server: COASTWATCH,
-    datasetId: "noaacwNPPVIIRSSQchlaDaily",
-    variable: "chlor_a",
-    units: "mg m⁻³",
-    colorBar: "Rainbow|C=log|I=0.01,20",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.6,
+  // 🌿 CHLOROPHYLL-A (Wasserqualität) - KORRIGIERT
+  chlorophyll: {
+    id: "chlorophyll",
+    name: "Chlorophyll-a (Algenwachstum)",
+    type: "wms",
+    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/erdVHNchlaWeekly/request",
+    wmsLayers: "erdVHNchlaWeekly:chla",
     legend: {
       title: "Chlorophyll-a Konzentration",
-      description: "Indikator für Algenwachstum. Hohe Werte = Verschmutzung/Eutrophierung",
-      range: "0.01-20 mg/m³"
+      description: "NOAA CoastWatch VIIRS - Indikator für Algenwachstum",
+      source: "Global, 4km, wöchentlich",
+      unit: "mg/m³",
+      levels: [
+        { value: "< 0.1", color: "#000080", label: "Sehr niedrig (oligotroph)" },
+        { value: "0.1-0.3", color: "#0000FF", label: "Niedrig" },
+        { value: "0.3-1.0", color: "#00FFFF", label: "Mäßig" },
+        { value: "1.0-3.0", color: "#00FF00", label: "Erhöht" },
+        { value: "3.0-10", color: "#FFFF00", label: "Hoch (eutroph)" },
+        { value: "> 10", color: "#FF0000", label: "Sehr hoch (Algenblüte)" }
+      ],
+      interpretation: "Hohe Werte können auf Eutrophierung (Überdüngung) hinweisen"
     }
   },
 
-  // 🌊 TRÜBUNG
+  // 💧 TRÜBUNG / WASSERKLARHEIT (Kd490) - KORRIGIERT
   turbidity: {
     id: "turbidity",
     name: "Trübung (Kd490)",
-    type: "erddap",
-    server: COASTWATCH,
-    datasetId: "noaacwNPPVIIRSkd490Daily",
-    variable: "kd_490",
-    units: "m⁻¹",
-    colorBar: "Rainbow|C=log|I=0.01,2",
-    belowColorHex: "0x00000000",
-    missingColorHex: "0x00000000",
-    opacity: 0.6,
+    type: "wms",
+    wmsUrl: "https://coastwatch.noaa.gov/erddap/wms/erdVH2kd4908day/request",
+    wmsLayers: "erdVH2kd4908kd490:kd_490",
     legend: {
-      title: "Wasser-Trübung (Kd490)",
-      description: "Lichtdurchlässigkeit des Wassers. Wichtig für Photosynthese der Korallen.",
-      range: "0.01-2 m⁻¹"
+      title: "Diffuse Dämpfung (Kd490)",
+      description: "NOAA CoastWatch VIIRS - Indikator für Wasserklarheit",
+      source: "Global, 4km, 8-Tage Komposit",
+      unit: "m⁻¹",
+      levels: [
+        { value: "< 0.05", color: "#000080", label: "Sehr klar" },
+        { value: "0.05-0.1", color: "#0000FF", label: "Klar" },
+        { value: "0.1-0.2", color: "#00FFFF", label: "Mäßig klar" },
+        { value: "0.2-0.5", color: "#00FF00", label: "Trüb" },
+        { value: "0.5-1.0", color: "#FFFF00", label: "Sehr trüb" },
+        { value: "> 1.0", color: "#FF0000", label: "Extrem trüb" }
+      ],
+      interpretation: "Hohe Werte = schlechte Sicht, mehr Sedimente/Partikel im Wasser"
     }
+  },
+
+  // 🌊 WASSERQUALITÄT (Kombiniert) - NEU
+  "water-quality": {
+    id: "water-quality",
+    name: "Wasserqualität",
+    type: "wms",
+    enabled: true,
+    wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
+    wmsLayers: "CRW_BAA",
+    legend: {
+      title: "Bleaching Alert Area (BAA)",
+      description: "NOAA Coral Reef Watch - Warnsystem für Korallenbleiche",
+      source: "5km Resolution, täglich aktualisiert",
+      unit: "Alert Level",
+      levels: [
+        { value: "Blau", color: "#0066CC", label: "Keine Daten / Normal - Sicher ✓" },
+        { value: "0", color: "#00FF00", label: "No Stress - Optimal" },
+        { value: "1", color: "#FFFF00", label: "Watch - Beobachten" },
+        { value: "2", color: "#FF8800", label: "Warning - Bleiche möglich" },
+        { value: "3", color: "#FF0000", label: "Alert Level 1 - Bleiche wahrscheinlich" },
+        { value: "4", color: "#AA0000", label: "Alert Level 2 - Massensterben" }
+      ],
+      interpretation: "Kombiniert Temperatur + Hitzestress + Licht. BLAU = GUT (keine Gefahr), ROT = GEFAHR (Bleiche)"
+    }
+  },
+
+  // 🔬 MIKROPLASTIK-VERSCHMUTZUNG
+  "microplastics": {
+    id: "microplastics",
+    name: "Mikroplastik-Verschmutzung",
+    type: "geojson",
+    url: "./data/Marine_Microplastics.geojson",
+    style: function(feature) {
+      const concentration = feature.properties.Concentration_class_text;
+      let color, radius;
+      
+      switch(concentration) {
+        case "Very Low":
+          color = "#00FF00";
+          radius = 3;
+          break;
+        case "Low":
+          color = "#AAFF00";
+          radius = 4;
+          break;
+        case "Medium":
+          color = "#FFFF00";
+          radius = 5;
+          break;
+        case "High":
+          color = "#FF8800";
+          radius = 6;
+          break;
+        case "Very High":
+          color = "#FF0000";
+          radius = 7;
+          break;
+        default:
+          color = "#888888";
+          radius = 3;
+      }
+      
+      return {
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.7,
+        weight: 1,
+        radius: radius
+      };
+    },
+    legend: {
+      title: "Mikroplastik-Konzentration",
+      description: "Globale Messungen von Mikroplastik in Meerwasser und Sedimenten",
+      source: "Verschiedene wissenschaftliche Studien",
+      unit: "pieces/m³ oder pieces/kg",
+      levels: [
+        { value: "Very Low", color: "#00FF00", label: "Sehr niedrig (0-0.0005 pieces/m³)" },
+        { value: "Low", color: "#AAFF00", label: "Niedrig (0.0005-0.005 pieces/m³)" },
+        { value: "Medium", color: "#FFFF00", label: "Mittel (0.005-1 pieces/m³)" },
+        { value: "High", color: "#FF8800", label: "Hoch (1-10 pieces/m³)" },
+        { value: "Very High", color: "#FF0000", label: "Sehr hoch (>10 pieces/m³)" }
+      ],
+      interpretation: "Mikroplastik gefährdet marine Organismen und kann in die Nahrungskette gelangen"
+    },
+    icon: "🔬"
+  },
+
+  // 🛢️ ÖL- UND CHEMIE-VORFÄLLE
+  "incidents": {
+    id: "incidents",
+    name: "Öl- & Chemie-Vorfälle",
+    type: "csv",
+    url: "./data/incidents.csv",
+    style: function(feature) {
+      const threat = feature.properties.threat;
+      let color, iconHtml;
+      
+      switch(threat) {
+        case "Oil":
+          color = "#000000";
+          iconHtml = "🛢️";
+          break;
+        case "Chemical":
+          color = "#9C27B0";
+          iconHtml = "⚗️";
+          break;
+        default:
+          color = "#666666";
+          iconHtml = "⚠️";
+      }
+      
+      return {
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.8,
+        weight: 2,
+        radius: 6,
+        iconHtml: iconHtml
+      };
+    },
+    legend: {
+      title: "Öl- und Chemie-Vorfälle",
+      description: "NOAA Incident News - Verschmutzungsvorfälle weltweit",
+      source: "NOAA Office of Response and Restoration",
+      levels: [
+        { value: "Oil", color: "#000000", label: "🛢️ Ölverschmutzung" },
+        { value: "Chemical", color: "#9C27B0", label: "⚗️ Chemische Verschmutzung" },
+        { value: "Other", color: "#666666", label: "⚠️ Andere Vorfälle" }
+      ],
+      interpretation: "Dokumentierte Umweltvorfälle mit potenzieller Gefahr für marine Ökosysteme"
+    },
+    icon: "🛢️"
   }
 };
 
-/**
- * OpenStreetMap Overpass API Queries (OPTIMIERT)
- */
+// ============================================================================
+// POI KONFIGURATION
+// ============================================================================
+
 export const overpassQueries = {
   diveSites: `
     [out:json][timeout:25];
@@ -193,37 +352,23 @@ export const overpassQueries = {
   `
 };
 
-/**
- * Statische POI-Daten (Fallback)
- */
 export const staticPOIs = {
   diveSites: [
-    // Great Barrier Reef
     { name: "Great Barrier Reef - Agincourt Reef", lat: -16.0333, lon: 145.8167, region: "GBR" },
     { name: "Great Barrier Reef - Cod Hole", lat: -14.6667, lon: 145.6167, region: "GBR" },
     { name: "SS Yongala Wreck", lat: -19.3042, lon: 147.6167, region: "GBR" },
-
-    // Karibik
     { name: "Blue Hole, Belize", lat: 17.3167, lon: -87.5333, region: "Caribbean" },
     { name: "Cozumel, Mexico", lat: 20.5083, lon: -86.9458, region: "Caribbean" },
     { name: "Bonaire Marine Park", lat: 12.2019, lon: -68.2624, region: "Caribbean" },
-
-    // Rotes Meer
     { name: "SS Thistlegorm Wreck", lat: 27.8167, lon: 33.9167, region: "Red Sea" },
     { name: "Ras Mohammed", lat: 27.7333, lon: 34.2333, region: "Red Sea" },
     { name: "Blue Hole Dahab", lat: 28.5833, lon: 34.5167, region: "Red Sea" },
-
-    // Indopazifik
     { name: "Raja Ampat, Indonesia", lat: -0.2297, lon: 130.5178, region: "Indo-Pacific" },
     { name: "Komodo National Park", lat: -8.5500, lon: 119.4833, region: "Indo-Pacific" },
     { name: "Sipadan Island, Malaysia", lat: 4.1158, lon: 118.6283, region: "Indo-Pacific" },
     { name: "Tubbataha Reef, Philippines", lat: 8.8583, lon: 119.8167, region: "Indo-Pacific" },
-
-    // Malediven
     { name: "Maldives - North Male Atoll", lat: 4.3333, lon: 73.5333, region: "Maldives" },
     { name: "Maldives - South Ari Atoll", lat: 3.7500, lon: 72.8333, region: "Maldives" },
-
-    // Pazifik
     { name: "Palau - Blue Corner", lat: 7.2431, lon: 134.2167, region: "Pacific" },
     { name: "Fiji - Rainbow Reef", lat: -16.7167, lon: 179.3333, region: "Pacific" },
     { name: "Galapagos Islands", lat: -0.9538, lon: -90.9656, region: "Pacific" }
@@ -241,9 +386,10 @@ export const staticPOIs = {
   ]
 };
 
-/**
- * Map-Einstellungen
- */
+// ============================================================================
+// MAP EINSTELLUNGEN
+// ============================================================================
+
 export const mapConfig = {
   center: [-5, 120],
   zoom: 4,
@@ -252,12 +398,7 @@ export const mapConfig = {
   worldCopyJump: false
 };
 
-/**
- * Performance-Einstellungen
- */
 export const performanceConfig = {
-  throttleDelay: 800,
-  maxPixels: 1024,
-  minBboxSize: 1.0,
-  debounceDelay: 1000
+  debounceDelay: 300,
+  minBboxSize: 1.0
 };

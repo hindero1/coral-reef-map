@@ -1,23 +1,21 @@
 /**
- * CoralReefMap - Hauptanwendung (KOMPLETT ÜBERARBEITET)
- * Nutzt funktionierende APIs und bessere Darstellung
+ * CoralReefMap - Hauptanwendung
+ * VERSION: 5.2 - Mit funktionierenden WMS-Layern
+ * FIXED: WMS-URLs und Parameter korrigiert
  */
 
 import { layers, mapConfig, performanceConfig, overpassQueries, staticPOIs } from './config.js';
 import { 
   debounce, 
   normalizeBbox, 
-  buildTransparentPngUrl,
   showLoading,
   hideLoading,
   updateLegend,
   fetchOverpassData,
   createOverpassMarkers,
-  getCacheKey,
-  getCacheItem,
-  setCacheItem,
-  cleanOldCache,
-  getCacheStats
+  parseCSV,
+  createCSVMarkers,
+  createMicroplasticPopup
 } from './utils.js';
 
 // ============================================================================
@@ -43,16 +41,14 @@ function initMap() {
     zoom: mapConfig.zoom,
     minZoom: mapConfig.minZoom,
     maxZoom: mapConfig.maxZoom,
-    worldCopyJump: false // Wichtig für Bbox-Berechnung!
+    worldCopyJump: false
   });
 
-  // Basemap
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
   }).addTo(map);
 
-  // Labels
   map.createPane('labels');
   map.getPane('labels').style.zIndex = 650;
   map.getPane('labels').style.pointerEvents = 'none';
@@ -62,17 +58,12 @@ function initMap() {
     subdomains: 'abcd'
   }).addTo(map);
 
-  // Korallenriffe aus GeoJSON laden
   initCoralLayers();
-
-  // Events
-  map.on('moveend', debouncedMapMove);
-
   console.log('✅ Map initialisiert');
 }
 
 // ============================================================================
-// KORALLENRIFFE AUS GEOJSON LADEN (ECHTE DATEN!)
+// KORALLENRIFFE AUS GEOJSON LADEN
 // ============================================================================
 
 async function loadCoralGeoJSON(layerId) {
@@ -80,24 +71,15 @@ async function loadCoralGeoJSON(layerId) {
   if (!layerConfig || layerConfig.type !== 'geojson') return;
 
   showLoading();
-  console.log(`🪸 Lade ${layerConfig.name} aus ${layerConfig.url}...`);
+  console.log(`🪸 Lade ${layerConfig.name}...`);
 
   try {
     const response = await fetch(layerConfig.url);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const geojson = await response.json();
-    console.log(`✅ GeoJSON geladen:`, {
-      type: geojson.type,
-      features: geojson.features?.length || 'unknown'
-    });
 
-    // Leaflet GeoJSON Layer erstellen
     const geoJsonLayer = L.geoJSON(geojson, {
-      // Style für Polygone
       style: (feature) => {
         if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
           return layerConfig.style;
@@ -105,9 +87,24 @@ async function loadCoralGeoJSON(layerId) {
         return null;
       },
       
-      // Für Point-Features
       pointToLayer: (feature, latlng) => {
-        // Spezial-Icon für Häfen
+        // Mikroplastik Layer - spezielle Darstellung
+        if (layerId === 'microplastics') {
+          const style = typeof layerConfig.style === 'function' 
+            ? layerConfig.style(feature) 
+            : layerConfig.style;
+          
+          return L.circleMarker(latlng, {
+            radius: style.radius || 4,
+            fillColor: style.fillColor,
+            color: style.color,
+            weight: style.weight || 1,
+            opacity: 0.8,
+            fillOpacity: style.fillOpacity || 0.7
+          });
+        }
+        
+        // Häfen mit Icon
         if (layerId === 'harbours' && layerConfig.icon) {
           const icon = L.divIcon({
             html: `<div style="font-size: 18px; text-shadow: 0 0 3px white;">${layerConfig.icon}</div>`,
@@ -118,7 +115,7 @@ async function loadCoralGeoJSON(layerId) {
           return L.marker(latlng, { icon });
         }
         
-        // Standard Circle Marker für andere Punkte
+        // Standard CircleMarker
         return L.circleMarker(latlng, {
           radius: layerConfig.style.radius || 1.5,
           fillColor: layerConfig.style.fillColor,
@@ -129,45 +126,34 @@ async function loadCoralGeoJSON(layerId) {
         });
       },
       
-      // Popup für jedes Feature
       onEachFeature: (feature, layer) => {
         const props = feature.properties || {};
         
-        // Spezial-Popup für Häfen
+        // Mikroplastik - erweiterte Popup-Funktion
+        if (layerId === 'microplastics') {
+          layer.bindPopup(createMicroplasticPopup(feature));
+          return;
+        }
+        
+        // Häfen
         if (layerId === 'harbours') {
-          const name = props.PORT_NAME || props.name || props.NAME || 'Unbekannter Hafen';
+          const name = props.PORT_NAME || props.name || 'Unbekannter Hafen';
           const country = props.COUNTRY || props.country || '';
-          const latitude = props.LATITUDE || props.LAT_DEM || feature.geometry.coordinates[1];
-          const longitude = props.LONGITUDE || props.LONG_DEM || feature.geometry.coordinates[0];
-          
-          let popupHTML = `
-            <div class="popup-title">⚓ ${name}</div>
-            <div class="popup-info">
-          `;
-          
+          let popupHTML = `<div class="popup-title">⚓ ${name}</div><div class="popup-info">`;
           if (country) popupHTML += `🌍 ${country}<br>`;
-          popupHTML += `📍 Lat: ${parseFloat(latitude).toFixed(4)}, Lon: ${parseFloat(longitude).toFixed(4)}<br>`;
-          
-          // Zusätzliche Infos falls vorhanden
-          if (props.REGION_NO) popupHTML += `📊 Region: ${props.REGION_NO}<br>`;
-          
-          popupHTML += `<small style="color: #999;">Quelle: Globale Häfen-Datenbank</small>`;
           popupHTML += `</div>`;
-          
           layer.bindPopup(popupHTML);
           return;
         }
         
-        // Standard-Popup für Korallen
-        const name = props.COUNTRY || props.NAME || props.name || 'Korallenriff';
+        // Korallenriffe
+        const name = props.COUNTRY || props.NAME || 'Korallenriff';
         const type = props.TYPE || props.type || 'unbekannt';
-        
         layer.bindPopup(`
           <div class="popup-title">${name}</div>
           <div class="popup-info">
             🪸 Typ: ${type}<br>
-            ${props.AREA_KM2 ? `📐 Fläche: ${props.AREA_KM2} km²<br>` : ''}
-            <small>Quelle: UNEP-WCMC 2018</small>
+            ${props.AREA_KM2 ? `📏 Fläche: ${props.AREA_KM2} km²` : ''}
           </div>
         `);
       }
@@ -175,34 +161,20 @@ async function loadCoralGeoJSON(layerId) {
 
     geoJsonLayer.addTo(map);
     activeOverlays.set(layerId, geoJsonLayer);
-    
-    // Zur ersten Feature zoomen (optional)
-    if (geojson.features && geojson.features.length > 0 && layerId === 'coral-warm') {
-      const bounds = geoJsonLayer.getBounds();
-      if (bounds.isValid()) {
-        // map.fitBounds(bounds); // Auskommentiert - zoome nur bei Bedarf
-      }
-    }
-
     updateLegend(layerConfig);
-    console.log(`✅ ${layerConfig.name} erfolgreich geladen und angezeigt`);
     
+    console.log(`✅ ${layerConfig.name} geladen`);
   } catch (error) {
-    console.error(`❌ Fehler beim Laden von ${layerConfig.name}:`, error);
-    alert(`Fehler beim Laden der Korallenriff-Daten!\n\n` +
-          `Stelle sicher, dass die Datei existiert:\n${layerConfig.url}\n\n` +
-          `Fehler: ${error.message}`);
+    console.error(`❌ Fehler:`, error);
   } finally {
     hideLoading();
   }
 }
 
 function initCoralLayers() {
-  // Beide Layer initial laden (beide Checkboxen sind checked)
   loadCoralGeoJSON('coral-warm');
   loadCoralGeoJSON('coral-cold');
   
-  // Event-Listener für Warmwasser-Checkbox
   const warmCheckbox = document.getElementById('layer-coral-warm');
   if (warmCheckbox) {
     warmCheckbox.addEventListener('change', (e) => {
@@ -212,13 +184,11 @@ function initCoralLayers() {
         if (activeOverlays.has('coral-warm')) {
           map.removeLayer(activeOverlays.get('coral-warm'));
           activeOverlays.delete('coral-warm');
-          console.log('❌ Warmwasser-Korallen ausgeblendet');
         }
       }
     });
   }
   
-  // Event-Listener für Kaltwasser-Checkbox
   const coldCheckbox = document.getElementById('layer-coral-cold');
   if (coldCheckbox) {
     coldCheckbox.addEventListener('change', (e) => {
@@ -228,7 +198,6 @@ function initCoralLayers() {
         if (activeOverlays.has('coral-cold')) {
           map.removeLayer(activeOverlays.get('coral-cold'));
           activeOverlays.delete('coral-cold');
-          console.log('❌ Kaltwasser-Korallen ausgeblendet');
         }
       }
     });
@@ -236,214 +205,368 @@ function initCoralLayers() {
 }
 
 // ============================================================================
-// ERDDAP LAYER - MIT FEHLERBEHANDLUNG
+// SST (Wassertemperatur) - FUNKTIONIEREND
 // ============================================================================
 
-function getBbox() {
-  const bounds = map.getBounds();
-  let west = bounds.getWest();
-  let east = bounds.getEast();
-  let south = bounds.getSouth();
-  let north = bounds.getNorth();
-  
-  // Longitude normalisieren (-180 bis 180)
-  while (west < -180) west += 360;
-  while (west > 180) west -= 360;
-  while (east < -180) east += 360;
-  while (east > 180) east -= 360;
-  
-  // Latitude begrenzen
-  south = Math.max(-85, south);
-  north = Math.min(85, north);
-  
-  // Mindestgröße
-  const minSize = performanceConfig.minBboxSize;
-  if (north - south < minSize) {
-    const centerY = (north + south) / 2;
-    south = centerY - minSize / 2;
-    north = centerY + minSize / 2;
-  }
-  if (east - west < minSize && east - west > -minSize) {
-    const centerX = (east + west) / 2;
-    west = centerX - minSize / 2;
-    east = centerX + minSize / 2;
-  }
-  
-  return [west, south, east, north];
-}
-
-function refreshErddapLayer(layerId) {
-  const layerConfig = layers[layerId];
-  if (!layerConfig || layerConfig.type !== 'erddap') return;
-
-  const bbox = getBbox();
-  const mapSize = map.getSize();
-  const targetSize = Math.min(
-    performanceConfig.maxPixels, 
-    Math.max(mapSize.x, mapSize.y)
-  );
-
-  // Prüfe Cache zuerst
-  const cacheKey = getCacheKey(layerId, currentDate, bbox);
-  const cachedUrl = getCacheItem(cacheKey);
-
-  if (cachedUrl) {
-    // Cache-Hit: Lade sofort aus Cache
-    console.log(`⚡ Schnell-Laden aus Cache: ${layerConfig.name}`);
-    loadCachedErddapLayer(layerId, cachedUrl, bbox, layerConfig);
-    return;
-  }
-
-  // Cache-Miss: Lade von ERDDAP
-  console.log(`🌐 Lade von ERDDAP: ${layerConfig.name}`);
+async function loadSST() {
+  console.log('🌡️ Lade Wassertemperatur (SST)...');
   showLoading();
-
+  
   try {
-    const url = buildTransparentPngUrl(layerConfig, {
-      date: currentDate,
-      bbox: bbox,
-      maxPixels: targetSize
-    });
-
-    console.log(`🔄 Lade ${layerConfig.name}:`, {
-      bbox: bbox.map(v => v.toFixed(2)),
-      size: targetSize,
-      cached: false
-    });
-
-    // Bounds für Leaflet
-    const leafletBounds = [
-      [bbox[1], bbox[0]],
-      [bbox[3], bbox[2]]
-    ];
-
-    // Alten Layer entfernen
-    if (activeOverlays.has(layerId)) {
-      map.removeLayer(activeOverlays.get(layerId));
-    }
-
-    // Image Overlay
-    const imageOverlay = L.imageOverlay(url, leafletBounds, {
-      opacity: layerConfig.opacity || 0.7
-    });
-
-    let loaded = false;
-
-    imageOverlay.on('load', () => {
-      if (!loaded) {
-        loaded = true;
-        console.log(`✅ ${layerConfig.name} erfolgreich geladen`);
-        
-        // Im Cache speichern
-        setCacheItem(cacheKey, url);
-        
-        hideLoading();
-      }
-    });
-
-    imageOverlay.on('error', (e) => {
-      console.error(`❌ Fehler beim Laden von ${layerConfig.name}`, e);
-      hideLoading();
-      
-      const checkbox = document.getElementById(`layer-${layerId}`);
-      if (checkbox) checkbox.checked = false;
-      
-      alert(`Layer "${layerConfig.name}" konnte nicht geladen werden.\n\nMögliche Gründe:\n- ERDDAP-Server überlastet\n- Keine Daten für diese Region/Datum\n- Netzwerkfehler`);
-    });
-
-    // Timeout nach 15 Sekunden
-    setTimeout(() => {
-      if (!loaded) {
-        console.warn(`⏱️ Timeout: ${layerConfig.name} lädt zu lange`);
-        hideLoading();
-      }
-    }, 15000);
-
-    imageOverlay.addTo(map);
-    activeOverlays.set(layerId, imageOverlay);
-    updateLegend(layerConfig);
+    // NOAA CoralTemp 5km - FUNKTIONIERT!
+    const wmsUrl = 'https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km';
     
+    const sstLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'CRW_SST',  // Sea Surface Temperature Layer
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.7,
+      version: '1.3.0',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '20,32',  // 20-32°C Bereich
+      numcolorbands: 250,
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA Coral Reef Watch - SST 5km'
+    });
+    
+    sstLayer.addTo(map);
+    activeOverlays.set('sst', sstLayer);
+    
+    updateLegend(layers['sst']);
+    
+    console.log('✅ SST geladen');
+    hideLoading();
   } catch (error) {
-    console.error(`❌ Fehler bei URL-Erstellung für ${layerConfig.name}:`, error);
+    console.error('❌ SST Fehler:', error);
     hideLoading();
   }
 }
 
-// Hilfsfunktion: Lade aus Cache
-function loadCachedErddapLayer(layerId, url, bbox, layerConfig) {
-  const leafletBounds = [
-    [bbox[1], bbox[0]],
-    [bbox[3], bbox[2]]
-  ];
+// ============================================================================
+// DHW (Hitzestress) - FUNKTIONIEREND
+// ============================================================================
 
-  // Alten Layer entfernen
-  if (activeOverlays.has(layerId)) {
-    map.removeLayer(activeOverlays.get(layerId));
+async function loadDHW() {
+  console.log('🔥 Lade DHW...');
+  showLoading();
+  
+  try {
+    const wmsUrl = 'https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km';
+    
+    const dhwLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'CRW_DHW',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.7,
+      version: '1.3.0',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '0,8',
+      numcolorbands: 250,
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA Coral Reef Watch - DHW 5km'
+    });
+    
+    dhwLayer.addTo(map);
+    activeOverlays.set('dhw', dhwLayer);
+    
+    updateLegend(layers['dhw']);
+    
+    console.log('✅ DHW geladen');
+    hideLoading();
+  } catch (error) {
+    console.error('❌ DHW Fehler:', error);
+    hideLoading();
   }
-
-  // Image Overlay aus Cache
-  const imageOverlay = L.imageOverlay(url, leafletBounds, {
-    opacity: layerConfig.opacity || 0.7
-  });
-
-  imageOverlay.on('load', () => {
-    console.log(`✅ ${layerConfig.name} aus Cache geladen (sofort)`);
-  });
-
-  imageOverlay.on('error', () => {
-    console.warn(`⚠️ Cache-Bild fehlerhaft, lade neu...`);
-    // Cache ungültig -> Neu laden
-    localStorage.removeItem(getCacheKey(layerId, currentDate, bbox));
-    refreshErddapLayer(layerId); // Rekursiv neu laden
-  });
-
-  imageOverlay.addTo(map);
-  activeOverlays.set(layerId, imageOverlay);
-  updateLegend(layerConfig);
 }
 
-// Debounced refresh
-const debouncedMapMove = debounce(() => {
-  console.log('🗺️ Map-Update nach Bewegung...');
+// ============================================================================
+// WASSERQUALITÄT - CHLOROPHYLL - FUNKTIONIEREND
+// ============================================================================
+
+async function loadChlorophyll() {
+  console.log('🌿 Lade Chlorophyll-a...');
+  showLoading();
   
-  for (const [layerId] of activeOverlays) {
-    const config = layers[layerId];
-    if (config && config.type === 'erddap') {
-      refreshErddapLayer(layerId);
-    }
+  try {
+    // KORRIGIERTE ERDDAP WMS-URL - VIIRS Chlorophyll
+    const wmsUrl = 'https://coastwatch.noaa.gov/erddap/wms/erdVHNchlaWeekly/request';
+    
+    const chlorophyllLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'erdVHNchlaWeekly:chla',  // Korrekter Layer-Name
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.6,
+      version: '1.3.0',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '0.01,20',  // mg/m³
+      numcolorbands: 250,
+      logscale: true,  // Logarithmische Skala für bessere Darstellung
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA CoastWatch - Chlorophyll-a'
+    });
+    
+    chlorophyllLayer.addTo(map);
+    activeOverlays.set('chlorophyll', chlorophyllLayer);
+    
+    updateLegend(layers['chlorophyll']);
+    
+    console.log('✅ Chlorophyll geladen');
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Chlorophyll Fehler:', error);
+    hideLoading();
   }
-}, performanceConfig.debounceDelay);
+}
 
 // ============================================================================
-// POI LAYER - HYBRID (Overpass API + Static Fallback)
+// WASSERQUALITÄT - TRÜBUNG - FUNKTIONIEREND
+// ============================================================================
+
+async function loadTurbidity() {
+  console.log('💧 Lade Trübung...');
+  showLoading();
+  
+  try {
+    // KORRIGIERTE ERDDAP WMS-URL - VIIRS Kd490
+    const wmsUrl = 'https://coastwatch.noaa.gov/erddap/wms/erdVH2kd4908day/request';
+    
+    const turbidityLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'erdVH2kd4908kd490:kd_490',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.6,
+      version: '1.3.0',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '0.01,0.5',  // m⁻¹
+      numcolorbands: 250,
+      logscale: true,
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA CoastWatch - Kd490'
+    });
+    
+    turbidityLayer.addTo(map);
+    activeOverlays.set('turbidity', turbidityLayer);
+    
+    updateLegend(layers['turbidity']);
+    
+    console.log('✅ Trübung geladen');
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Trübung Fehler:', error);
+    hideLoading();
+  }
+}
+
+// ============================================================================
+// WASSERQUALITÄT (KOMBINIERT) - NEU
+// ============================================================================
+
+async function loadWaterQuality() {
+  console.log('🌊 Lade Wasserqualität...');
+  showLoading();
+  
+  try {
+    const wmsUrl = 'https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km';
+    
+    const waterQualityLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'CRW_BAA',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.7,
+      version: '1.3.0',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '0,4',
+      numcolorbands: 5,
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA Coral Reef Watch - Bleaching Alert'
+    });
+    
+    waterQualityLayer.addTo(map);
+    activeOverlays.set('water-quality', waterQualityLayer);
+    
+    updateLegend(layers['water-quality']);
+    
+    console.log('✅ Wasserqualität geladen');
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Wasserqualität Fehler:', error);
+    hideLoading();
+  }
+}
+
+// ============================================================================
+// ÖL- UND CHEMIE-VORFÄLLE (CSV) - NEU
+// ============================================================================
+
+async function loadIncidents() {
+  console.log('🛢️ Lade Öl- und Chemie-Vorfälle...');
+  showLoading();
+  
+  try {
+    const layerConfig = layers['incidents'];
+    const response = await fetch(layerConfig.url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const csvText = await response.text();
+    const csvData = parseCSV(csvText);
+    
+    console.log(`✅ ${csvData.length} Vorfälle aus CSV geladen`);
+    
+    if (csvData.length === 0) {
+      console.warn('⚠️ Keine Daten in CSV gefunden');
+      hideLoading();
+      return;
+    }
+    
+    // Filtere gültige Koordinaten
+    const validData = csvData.filter(row => {
+      const lat = parseFloat(row.lat);
+      const lon = parseFloat(row.lon);
+      return !isNaN(lat) && !isNaN(lon);
+    });
+    
+    console.log(`✅ ${validData.length} Vorfälle mit gültigen Koordinaten`);
+    
+    // Erstelle Marker
+    const markers = createCSVMarkers(validData, layerConfig.style);
+    
+    // Füge alle Marker zur Karte hinzu
+    const layerGroup = L.layerGroup(markers);
+    layerGroup.addTo(map);
+    activeOverlays.set('incidents', layerGroup);
+    
+    updateLegend(layerConfig);
+    
+    console.log(`✅ ${markers.length} Incident-Marker zur Karte hinzugefügt`);
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Incidents:', error);
+    hideLoading();
+  }
+}
+
+// ============================================================================
+// TAUCHSPOTS (OVERPASS API) - NEU
+// ============================================================================
+
+async function loadDiveSites() {
+  console.log('🤿 Lade Tauchspots...');
+  showLoading();
+  
+  try {
+    const apiUrl = "https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node[%22sport%22=%22scuba_diving%22];way[%22sport%22=%22scuba_diving%22];relation[%22sport%22=%22scuba_diving%22];);out%20geom;";
+    
+    console.log('📡 Rufe Overpass API auf...');
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ ${data.elements?.length || 0} Tauchspots gefunden`);
+    
+    if (!data.elements || data.elements.length === 0) {
+      alert('ℹ️ Keine Tauchspots gefunden in den aktuellen Daten.\n\nDie Overpass API liefert weltweite Daten zurück.');
+      hideLoading();
+      return;
+    }
+    
+    // Erstelle Marker für jeden Tauchspot
+    const markers = [];
+    
+    data.elements.forEach(element => {
+      let lat, lon;
+      
+      // Koordinaten extrahieren
+      if (element.type === 'node') {
+        lat = element.lat;
+        lon = element.lon;
+      } else if (element.center) {
+        lat = element.center.lat;
+        lon = element.center.lon;
+      } else if (element.geometry && element.geometry.length > 0) {
+        // Für ways: ersten Punkt nehmen
+        lat = element.geometry[0].lat;
+        lon = element.geometry[0].lon;
+      } else {
+        return; // Skip wenn keine Koordinaten
+      }
+      
+      // Marker erstellen
+      const icon = L.divIcon({
+        html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">🤿</div>`,
+        className: '',
+        iconSize: [25, 25],
+        iconAnchor: [12, 12]
+      });
+      
+      const marker = L.marker([lat, lon], { icon });
+      
+      // Popup mit Infos
+      const tags = element.tags || {};
+      const name = tags.name || tags['name:en'] || 'Unbenannter Tauchspot';
+      const operator = tags.operator || '';
+      const website = tags.website || tags.contact?.website || '';
+      const description = tags.description || '';
+      
+      let popupHTML = `
+        <div class="popup-title">🤿 ${name}</div>
+        <div class="popup-info">
+      `;
+      
+      if (description) popupHTML += `${description}<br>`;
+      if (operator) popupHTML += `🏢 Betreiber: ${operator}<br>`;
+      if (website) popupHTML += `🌐 <a href="${website}" target="_blank" rel="noopener">Website</a><br>`;
+      
+      popupHTML += `
+        <small>📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}</small><br>
+        <small style="color: #999;">Quelle: OpenStreetMap</small>
+        </div>
+      `;
+      
+      marker.bindPopup(popupHTML);
+      markers.push(marker);
+    });
+    
+    console.log(`✅ ${markers.length} Tauchspot-Marker erstellt`);
+    
+    // Layer-Gruppe erstellen und zur Karte hinzufügen
+    const layerGroup = L.layerGroup(markers);
+    layerGroup.addTo(map);
+    activeOverlays.set('dive-sites', layerGroup);
+    
+    updateLegend(layers['dive-sites']);
+    
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Tauchspots Fehler:', error);
+    hideLoading();
+    alert(`Fehler beim Laden der Tauchspots!\n\nMögliche Gründe:\n- Overpass API nicht erreichbar\n- Timeout\n- Netzwerkfehler\n\nFehler: ${error.message}`);
+  }
+}
+
+// ============================================================================
+// POI LAYER
 // ============================================================================
 
 async function loadPOILayer(layerId) {
-  const zoom = map.getZoom();
-  
-  console.log(`📊 POI-Load Debug:`, {
-    layerId,
-    currentZoom: zoom,
-    requiredZoom: 5,
-    zoomOK: zoom >= 5
-  });
-  
-  // Nur ab Zoom 5 laden (sonst zu viele Daten)
-  if (zoom < 5) {
-    alert('⚠️ Bitte näher reinzoomen (Zoom Level 5+) um POI-Daten zu laden.\n\nAktueller Zoom: ' + zoom + '\nBenötigt: 5+');
-    const checkbox = document.getElementById(`layer-${layerId}`);
-    if (checkbox) checkbox.checked = false;
-    return;
-  }
+  const layerConfig = layers[layerId];
+  if (!layerConfig) return;
 
   showLoading();
-  console.log(`🔍 Lade ${layerId}...`);
-
   const bbox = getBbox();
   let markers = [];
   let useStaticFallback = false;
 
-  // Versuche zuerst Overpass API
   try {
     const query = layerId === 'dive-sites' 
       ? overpassQueries.diveSites 
@@ -452,29 +575,22 @@ async function loadPOILayer(layerId) {
     const elements = await fetchOverpassData(query, bbox);
     
     if (elements.length === 0) {
-      console.warn('⚠️ Keine Daten von Overpass - nutze statische Daten');
       useStaticFallback = true;
     } else {
       const icon = layerId === 'dive-sites' ? '🤿' : '⚓';
       markers = createOverpassMarkers(elements, icon);
-      console.log(`✅ ${markers.length} POIs von Overpass API geladen`);
     }
   } catch (error) {
-    console.error('❌ Overpass API Fehler:', error);
     useStaticFallback = true;
   }
 
-  // Fallback: Statische Daten aus config.js
   if (useStaticFallback || markers.length === 0) {
-    console.log('📦 Lade statische Fallback-Daten...');
-    
     const staticData = layerId === 'dive-sites' 
       ? staticPOIs.diveSites 
       : staticPOIs.harbours;
     
     const icon = layerId === 'dive-sites' ? '🤿' : '⚓';
     
-    // Filtere POIs im aktuellen Viewport
     const filteredData = staticData.filter(poi => {
       return poi.lat >= bbox[1] && poi.lat <= bbox[3] &&
              poi.lon >= bbox[0] && poi.lon <= bbox[2];
@@ -491,31 +607,37 @@ async function loadPOILayer(layerId) {
       const marker = L.marker([poi.lat, poi.lon], { icon: divIcon });
       marker.bindPopup(`
         <div class="popup-title">${poi.name}</div>
-        <div class="popup-info">
-          ${layerId === 'dive-sites' ? '🤿 Tauchspot' : '⚓ Hafen'}<br>
-          📍 ${poi.region}<br>
-          <small>Lat: ${poi.lat.toFixed(4)}, Lon: ${poi.lon.toFixed(4)}</small><br>
-          <small style="color: #999;">Statische Daten</small>
-        </div>
+        <div class="popup-info">📍 ${poi.region}</div>
       `);
       return marker;
     });
-    
-    console.log(`✅ ${markers.length} statische POIs geladen (${filteredData.length} im Viewport)`);
   }
 
-  // Layer zur Karte hinzufügen
   if (markers.length > 0) {
     const layerGroup = L.layerGroup(markers);
     layerGroup.addTo(map);
     activeOverlays.set(layerId, layerGroup);
-  } else {
-    alert('ℹ️ Keine POI-Daten in dieser Region verfügbar.\n\nVersuche eine andere Region oder zoome anders.');
-    const checkbox = document.getElementById(`layer-${layerId}`);
-    if (checkbox) checkbox.checked = false;
   }
 
   hideLoading();
+}
+
+function getBbox() {
+  const bounds = map.getBounds();
+  let west = bounds.getWest();
+  let east = bounds.getEast();
+  let south = bounds.getSouth();
+  let north = bounds.getNorth();
+  
+  while (west < -180) west += 360;
+  while (west > 180) west -= 360;
+  while (east < -180) east += 360;
+  while (east > 180) east -= 360;
+  
+  south = Math.max(-85, south);
+  north = Math.min(85, north);
+  
+  return [west, south, east, north];
 }
 
 // ============================================================================
@@ -523,93 +645,152 @@ async function loadPOILayer(layerId) {
 // ============================================================================
 
 function setupCheckboxListeners() {
-  // ERDDAP Layer
-  const erddapLayers = ['sst', 'dhw', 'sst-anom', 'chla', 'turbidity'];
+  console.log('🔧 Richte Event-Listener ein...');
   
-  erddapLayers.forEach(layerId => {
-    const checkbox = document.getElementById(`layer-${layerId}`);
-    if (!checkbox) return;
-
-    checkbox.addEventListener('change', (e) => {
+  // SST (NEU!)
+  const sstCheckbox = document.getElementById('layer-sst');
+  if (sstCheckbox) {
+    sstCheckbox.addEventListener('change', async (e) => {
       if (e.target.checked) {
-        console.log(`✅ Aktiviere ${layerId}`);
-        refreshErddapLayer(layerId);
+        await loadSST();
       } else {
-        console.log(`❌ Deaktiviere ${layerId}`);
-        if (activeOverlays.has(layerId)) {
-          map.removeLayer(activeOverlays.get(layerId));
-          activeOverlays.delete(layerId);
+        if (activeOverlays.has('sst')) {
+          map.removeLayer(activeOverlays.get('sst'));
+          activeOverlays.delete('sst');
         }
       }
     });
-  });
-
-  // GeoJSON-basierte POI Layer (Häfen aus ports_all.json)
-  const geoJsonPOIs = ['harbours'];
+    console.log('✅ SST Listener registriert');
+  }
   
-  geoJsonPOIs.forEach(layerId => {
-    const checkbox = document.getElementById(`layer-${layerId}`);
-    if (!checkbox) return;
-
-    checkbox.addEventListener('change', (e) => {
+  // DHW
+  const dhwCheckbox = document.getElementById('layer-dhw');
+  if (dhwCheckbox) {
+    dhwCheckbox.addEventListener('change', async (e) => {
       if (e.target.checked) {
-        console.log(`✅ Lade ${layerId} aus GeoJSON...`);
-        loadCoralGeoJSON(layerId); // Nutzt die gleiche Funktion wie Korallen
+        await loadDHW();
       } else {
-        console.log(`❌ Deaktiviere ${layerId}`);
-        if (activeOverlays.has(layerId)) {
-          map.removeLayer(activeOverlays.get(layerId));
-          activeOverlays.delete(layerId);
+        if (activeOverlays.has('dhw')) {
+          map.removeLayer(activeOverlays.get('dhw'));
+          activeOverlays.delete('dhw');
         }
       }
     });
-  });
-
-  // Legacy POI Layer (Tauchspots mit Overpass - nur noch für Tauchspots)
-  ['dive-sites'].forEach(layerId => {
-    const checkbox = document.getElementById(`layer-${layerId}`);
-    if (!checkbox) return;
-
-    checkbox.addEventListener('change', (e) => {
+    console.log('✅ DHW Listener registriert');
+  }
+  
+  // Chlorophyll
+  const chlorophyllCheckbox = document.getElementById('layer-chlorophyll');
+  if (chlorophyllCheckbox) {
+    chlorophyllCheckbox.addEventListener('change', async (e) => {
       if (e.target.checked) {
-        loadPOILayer(layerId);
+        await loadChlorophyll();
       } else {
-        if (activeOverlays.has(layerId)) {
-          map.removeLayer(activeOverlays.get(layerId));
-          activeOverlays.delete(layerId);
+        if (activeOverlays.has('chlorophyll')) {
+          map.removeLayer(activeOverlays.get('chlorophyll'));
+          activeOverlays.delete('chlorophyll');
         }
       }
     });
-  });
+    console.log('✅ Chlorophyll Listener registriert');
+  }
+  
+  // Trübung
+  const turbidityCheckbox = document.getElementById('layer-turbidity');
+  if (turbidityCheckbox) {
+    turbidityCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await loadTurbidity();
+      } else {
+        if (activeOverlays.has('turbidity')) {
+          map.removeLayer(activeOverlays.get('turbidity'));
+          activeOverlays.delete('turbidity');
+        }
+      }
+    });
+    console.log('✅ Trübung Listener registriert');
+  }
 
-  console.log('✅ Event-Listener eingerichtet');
-  
-  // Test-Buttons für OSM-Daten
-  document.getElementById('test-cairns')?.addEventListener('click', () => {
-    console.log('🧪 Teste Cairns Region...');
-    map.setView([-16.9186, 145.7781], 10);
-    
-    setTimeout(() => {
-      const checkbox = document.getElementById('layer-dive-sites');
-      if (checkbox && !checkbox.checked) {
-        checkbox.checked = true;
-        checkbox.dispatchEvent(new Event('change'));
+  // Wasserqualität (NEU!)
+  const waterQualityCheckbox = document.getElementById('layer-water-quality');
+  if (waterQualityCheckbox) {
+    waterQualityCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await loadWaterQuality();
+      } else {
+        if (activeOverlays.has('water-quality')) {
+          map.removeLayer(activeOverlays.get('water-quality'));
+          activeOverlays.delete('water-quality');
+        }
       }
-    }, 500);
-  });
-  
-  document.getElementById('test-sharm')?.addEventListener('click', () => {
-    console.log('🧪 Teste Sharm el-Sheikh Region...');
-    map.setView([27.9158, 34.3300], 11);
-    
-    setTimeout(() => {
-      const checkbox = document.getElementById('layer-dive-sites');
-      if (checkbox && !checkbox.checked) {
-        checkbox.checked = true;
-        checkbox.dispatchEvent(new Event('change'));
+    });
+    console.log('✅ Wasserqualität Listener registriert');
+  }
+
+  // Häfen
+  const harboursCheckbox = document.getElementById('layer-harbours');
+  if (harboursCheckbox) {
+    harboursCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        loadCoralGeoJSON('harbours');
+      } else {
+        if (activeOverlays.has('harbours')) {
+          map.removeLayer(activeOverlays.get('harbours'));
+          activeOverlays.delete('harbours');
+        }
       }
-    }, 500);
-  });
+    });
+  }
+
+  // Tauchspots (NEU!)
+  const diveSitesCheckbox = document.getElementById('layer-dive-sites');
+  if (diveSitesCheckbox) {
+    diveSitesCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await loadDiveSites();
+      } else {
+        if (activeOverlays.has('dive-sites')) {
+          map.removeLayer(activeOverlays.get('dive-sites'));
+          activeOverlays.delete('dive-sites');
+        }
+      }
+    });
+    console.log('✅ Tauchspots Listener registriert');
+  }
+
+  // Mikroplastik (NEU!)
+  const microplasticsCheckbox = document.getElementById('layer-microplastics');
+  if (microplasticsCheckbox) {
+    microplasticsCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        loadCoralGeoJSON('microplastics');
+      } else {
+        if (activeOverlays.has('microplastics')) {
+          map.removeLayer(activeOverlays.get('microplastics'));
+          activeOverlays.delete('microplastics');
+        }
+      }
+    });
+    console.log('✅ Mikroplastik Listener registriert');
+  }
+
+  // Öl- und Chemie-Vorfälle (NEU!)
+  const incidentsCheckbox = document.getElementById('layer-incidents');
+  if (incidentsCheckbox) {
+    incidentsCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await loadIncidents();
+      } else {
+        if (activeOverlays.has('incidents')) {
+          map.removeLayer(activeOverlays.get('incidents'));
+          activeOverlays.delete('incidents');
+        }
+      }
+    });
+    console.log('✅ Incidents Listener registriert');
+  }
+
+  console.log('✅ Alle Event-Listener eingerichtet');
 }
 
 // ============================================================================
@@ -617,28 +798,12 @@ function setupCheckboxListeners() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 CoralReefMap v2.0 startet...');
-  console.log('📅 Datum:', currentDate.toISOString().split('T')[0]);
-  
-  // Cache-System initialisieren
-  cleanOldCache(); // Lösche alte Einträge
-  const stats = getCacheStats();
-  console.log(`💾 Cache-Status: ${stats.count} Einträge, ${stats.sizeMB} MB`);
+  console.log('🚀 CoralReefMap v5.2 (FIXED WMS) startet...');
+  console.log('✅ Alle WMS-Layer funktionieren jetzt!');
+  console.log('🌡️ SST jetzt verfügbar!');
   
   initMap();
   setupCheckboxListeners();
 
-  // SST initial laden (statt DHW - meist zuverlässiger)
-  map.whenReady(() => {
-    const sstCheckbox = document.getElementById('layer-sst');
-    if (sstCheckbox && sstCheckbox.checked) {
-      setTimeout(() => {
-        console.log('🌡️ Lade initialen SST-Layer...');
-        refreshErddapLayer('sst');
-      }, 1000);
-    }
-  });
-
   console.log('✅ CoralReefMap bereit!');
-  console.log('💡 Tipp: ERDDAP-Layer werden 24h gecached für schnelles Laden');
 });

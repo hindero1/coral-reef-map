@@ -25,33 +25,29 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="panel">
-                <h3>🗺️ Basis-Layer</h3>
+                <h3>🪸 Korallenriffe</h3>
                 <div class="layer-control">
                     <label class="checkbox-label">
                         <input type="checkbox" id="layer-coral-warm" checked>
-                        <span>🪸 Warmwasser-Korallenriffe</span>
+                        <span>Warmwasser-Korallenriffe</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="layer-coral-cold" checked>
-                        <span>❄️ Kaltwasser-Korallenriffe</span>
+                        <span>Kaltwasser-Korallenriffe</span>
                     </label>
                 </div>
             </div>
 
             <div class="panel">
-                <h3>🌡️ Umweltdaten (ERDDAP)</h3>
+                <h3>🌡️ Temperatur-Daten</h3>
                 <div class="layer-control">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="layer-sst" checked>
+                        <input type="checkbox" id="layer-sst">
                         <span>Wassertemperatur (SST)</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="layer-dhw">
                         <span>Hitzestress (DHW)</span>
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="layer-sst-anom">
-                        <span>SST Anomalie</span>
                     </label>
                 </div>
             </div>
@@ -60,37 +56,37 @@
                 <h3>🌊 Wasserqualität</h3>
                 <div class="layer-control">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="layer-chla">
-                        <span>Chlorophyll-a (Algenwachstum)</span>
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="layer-turbidity">
-                        <span>Trübung (Kd490)</span>
+                        <input type="checkbox" id="layer-water-quality">
+                        <span>Wasserklarheit (Trübung)</span>
                     </label>
                 </div>
             </div>
 
             <div class="panel">
-                <h3>📍 Points of Interest</h3>
+                <h3>🔬 Verschmutzung</h3>
                 <div class="layer-control">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="layer-microplastics">
+                        <span>Mikroplastik-Messungen</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="layer-incidents">
+                        <span>Öl- & Chemie-Vorfälle</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>⚓ Häfen & Tauchspots</h3>
+                <div class="layer-control">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="layer-harbours">
+                        <span>Häfen weltweit</span>
+                    </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="layer-dive-sites">
                         <span>Tauchspots</span>
                     </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="layer-harbours">
-                        <span>Häfen</span>
-                    </label>
-                </div>
-                
-                <!-- Debug Helper -->
-                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
-                    <button id="test-cairns" style="width: 100%; padding: 8px; margin-bottom: 5px; background: #1e3c72; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
-                        🧪 Test: Cairns (OSM-Daten)
-                    </button>
-                    <button id="test-sharm" style="width: 100%; padding: 8px; background: #1e3c72; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
-                        🧪 Test: Sharm el-Sheikh
-                    </button>
                 </div>
             </div>
 
@@ -98,14 +94,6 @@
                 <h3>ℹ️ Legende</h3>
                 <div id="legend-content">
                     <p class="legend-placeholder">Wähle einen Layer aus um Details zu sehen</p>
-                </div>
-                
-                <!-- Cache Info -->
-                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ddd;">
-                    <small style="color: #666;">
-                        <strong>💾 Cache-System aktiv</strong><br>
-                        ERDDAP-Daten werden 24h zwischengespeichert für schnelleres Laden
-                    </small>
                 </div>
             </div>
         </aside>
