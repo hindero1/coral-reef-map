@@ -151,7 +151,7 @@ async function loadCoralGeoJSON(layerId) {
         // Häfen
         if (layerId === 'harbours') {
           const name = props.PORT_NAME || props.name || 'Unbekannter Hafen';
-          const country = props.COUNTRY || props.country || 'Land unbekannt';
+          const country = props.COUNTRY || props.country || '';
           let popupHTML = `<div class="popup-title">⚓ ${name}</div><div class="popup-info">`;
           if (country) popupHTML += `🌍 ${country}<br>`;
           popupHTML += `</div>`;
@@ -161,7 +161,7 @@ async function loadCoralGeoJSON(layerId) {
         
         // Korallenriffe
         const name = props.COUNTRY || props.NAME || 'Korallenriff';
-        const type = props.TYPE || props.type || 'Warmwasserkoralle';
+        const type = props.TYPE || props.type || 'unbekannt';
         layer.bindPopup(`
           <div class="popup-title">${name}</div>
           <div class="popup-info">
@@ -467,7 +467,7 @@ async function loadIncidents() {
 }
 
 // ============================================================================
-// TAUCHSPOTS (OVERPASS API) - NEU
+// TAUCHSPOTS (STATISCHE DATEN) - ÜBERARBEITET
 // ============================================================================
 
 async function loadDiveSites() {
@@ -475,7 +475,78 @@ async function loadDiveSites() {
   showLoading();
   
   try {
-    const apiUrl = "https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node[%22sport%22=%22scuba_diving%22];way[%22sport%22=%22scuba_diving%22];relation[%22sport%22=%22scuba_diving%22];);out%20geom;";
+    // Zoom-Level prüfen - Overpass API nur bei gutem Zoom
+    const currentZoom = map.getZoom();
+    const minZoomForOverpass = 6;  // Mindest-Zoom für Overpass API
+    
+    // Wenn zu weit herausgezoomt: Verwende statische POIs
+    if (currentZoom < minZoomForOverpass) {
+      console.log(`ℹ️ Zoom-Level ${currentZoom} zu niedrig für Overpass API (min: ${minZoomForOverpass})`);
+      console.log('📍 Verwende statische Tauchspots...');
+      
+      // Lade statische Tauchspots aus config.js
+      const diveSites = staticPOIs.diveSites;
+      
+      if (!diveSites || diveSites.length === 0) {
+        alert('ℹ️ Keine Tauchspots verfügbar.\n\nBitte zoomen Sie näher heran (Zoom > 6) um OpenStreetMap-Daten zu laden.');
+        hideLoading();
+        return;
+      }
+      
+      // Erstelle Marker für statische POIs
+      const markers = diveSites.map(site => {
+        const icon = L.divIcon({
+          html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">🤿</div>`,
+          className: '',
+          iconSize: [25, 25],
+          iconAnchor: [12, 12]
+        });
+        
+        const marker = L.marker([site.lat, site.lon], { icon });
+        
+        let popupHTML = `
+          <div class="popup-title">🤿 ${site.name}</div>
+          <div class="popup-info">
+            🌍 Region: ${site.region}<br>
+            <small>📍 ${site.lat.toFixed(4)}, ${site.lon.toFixed(4)}</small><br>
+            <small style="color: #999;">Beliebter Tauchspot</small><br>
+            <small style="color: #666;">💡 Zoom > 6 für mehr Details</small>
+          </div>
+        `;
+        
+        marker.bindPopup(popupHTML);
+        return marker;
+      });
+      
+      const layerGroup = L.layerGroup(markers);
+      layerGroup.addTo(map);
+      activeOverlays.set('dive-sites', layerGroup);
+      
+      updateLegend(layers['dive-sites']);
+      
+      console.log(`✅ ${markers.length} statische Tauchspots geladen`);
+      hideLoading();
+      return;
+    }
+    
+    // Bei gutem Zoom: Versuche Overpass API mit Bounding Box
+    console.log('📡 Zoom-Level ausreichend, verwende Overpass API...');
+    
+    const bounds = map.getBounds();
+    const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+    
+    const query = `[out:json][timeout:25];
+      (
+        node["sport"="scuba_diving"](${bbox});
+        node["sport"="diving"](${bbox});
+        node["leisure"="dive_centre"](${bbox});
+        way["sport"="scuba_diving"](${bbox});
+        way["sport"="diving"](${bbox});
+        relation["sport"="scuba_diving"](${bbox});
+      );
+      out center;`;
+    
+    const apiUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
     
     console.log('📡 Rufe Overpass API auf...');
     const response = await fetch(apiUrl);
@@ -485,15 +556,56 @@ async function loadDiveSites() {
     }
     
     const data = await response.json();
-    console.log(`✅ ${data.elements?.length || 0} Tauchspots gefunden`);
+    console.log(`✅ ${data.elements?.length || 0} Tauchspots von Overpass gefunden`);
     
     if (!data.elements || data.elements.length === 0) {
-      alert('ℹ️ Keine Tauchspots gefunden in den aktuellen Daten.\n\nDie Overpass API liefert weltweite Daten zurück.');
+      console.log('ℹ️ Keine Overpass-Daten im aktuellen Bereich');
+      
+      // Fallback zu statischen POIs im sichtbaren Bereich
+      const visiblePOIs = staticPOIs.diveSites.filter(site => {
+        return site.lat >= bounds.getSouth() && 
+               site.lat <= bounds.getNorth() &&
+               site.lon >= bounds.getWest() && 
+               site.lon <= bounds.getEast();
+      });
+      
+      if (visiblePOIs.length > 0) {
+        console.log(`📍 Zeige ${visiblePOIs.length} statische POIs im Bereich`);
+        
+        const markers = visiblePOIs.map(site => {
+          const icon = L.divIcon({
+            html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">🤿</div>`,
+            className: '',
+            iconSize: [25, 25],
+            iconAnchor: [12, 12]
+          });
+          
+          const marker = L.marker([site.lat, site.lon], { icon });
+          marker.bindPopup(`
+            <div class="popup-title">🤿 ${site.name}</div>
+            <div class="popup-info">
+              🌍 Region: ${site.region}<br>
+              <small>📍 ${site.lat.toFixed(4)}, ${site.lon.toFixed(4)}</small>
+            </div>
+          `);
+          return marker;
+        });
+        
+        const layerGroup = L.layerGroup(markers);
+        layerGroup.addTo(map);
+        activeOverlays.set('dive-sites', layerGroup);
+        updateLegend(layers['dive-sites']);
+        
+        hideLoading();
+        return;
+      }
+      
+      alert('ℹ️ Keine Tauchspots in diesem Bereich gefunden.');
       hideLoading();
       return;
     }
     
-    // Erstelle Marker für jeden Tauchspot
+    // Erstelle Marker für Overpass-Daten
     const markers = [];
     
     data.elements.forEach(element => {
@@ -507,11 +619,10 @@ async function loadDiveSites() {
         lat = element.center.lat;
         lon = element.center.lon;
       } else if (element.geometry && element.geometry.length > 0) {
-        // Für ways: ersten Punkt nehmen
         lat = element.geometry[0].lat;
         lon = element.geometry[0].lon;
       } else {
-        return; // Skip wenn keine Koordinaten
+        return;
       }
       
       // Marker erstellen
@@ -550,20 +661,22 @@ async function loadDiveSites() {
       markers.push(marker);
     });
     
-    console.log(`✅ ${markers.length} Tauchspot-Marker erstellt`);
-    
-    // Layer-Gruppe erstellen und zur Karte hinzufügen
     const layerGroup = L.layerGroup(markers);
     layerGroup.addTo(map);
     activeOverlays.set('dive-sites', layerGroup);
     
     updateLegend(layers['dive-sites']);
     
+    console.log(`✅ ${markers.length} Overpass Tauchspots zur Karte hinzugefügt`);
     hideLoading();
+    
   } catch (error) {
-    console.error('❌ Tauchspots Fehler:', error);
+    console.error('❌ Fehler beim Laden der Tauchspots:', error);
+    
+    // Zeige Fehlermeldung
+    alert(`Fehler beim Laden der Tauchspots!\n\nMögliche Gründe:\n- Overpass API nicht erreichbar\n- Timeout\n- Netzwerkfehler\n\nFehler: ${error.message}\n\nℹ️ Tipp: Zoomen Sie näher heran (Zoom > 6) und versuchen Sie es erneut.`);
+    
     hideLoading();
-    alert(`Fehler beim Laden der Tauchspots!\n\nMögliche Gründe:\n- Overpass API nicht erreichbar\n- Timeout\n- Netzwerkfehler\n\nFehler: ${error.message}`);
   }
 }
 

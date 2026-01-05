@@ -217,7 +217,7 @@ export const layers = {
     id: "microplastics",
     name: "Mikroplastik-Verschmutzung",
     type: "geojson",
-    url: "./data/Marine_Microplastics_sample.geojson",
+    url: "./data/Marine_Microplastics.geojson",
     style: function(feature) {
       const concentration = feature.properties.Concentration_class_text;
       let color, radius;
