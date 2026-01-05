@@ -36,16 +36,27 @@ const currentDate = new Date(Date.UTC(
 // ============================================================================
 
 function initMap() {
+  // Definiere maximale Grenzen (verhindert unendliches Scrollen)
+  const maxBounds = [
+    [-90, -180],  // Südwest-Ecke
+    [90, 180]     // Nordost-Ecke
+  ];
+
   map = L.map('map', {
     center: mapConfig.center,
     zoom: mapConfig.zoom,
     minZoom: mapConfig.minZoom,
     maxZoom: mapConfig.maxZoom,
-    worldCopyJump: false
+    maxBounds: maxBounds,           // Begrenzt die Karte auf eine Weltkopie
+    maxBoundsViscosity: 1.0,        // Macht die Grenzen "hart" (kein Überscrollen)
+    worldCopyJump: false,           // Verhindert Springen zwischen Weltkopien
+    noWrap: true                    // Verhindert das Wrappen der Tiles
   });
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
+    noWrap: true,  // Verhindert Tile-Wrapping
+    bounds: [[-90, -180], [90, 180]],  // Begrenzt Tiles auf eine Weltkopie
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
   }).addTo(map);
 
@@ -55,7 +66,9 @@ function initMap() {
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
     pane: 'labels',
-    subdomains: 'abcd'
+    subdomains: 'abcd',
+    noWrap: true,  // Verhindert Tile-Wrapping bei Labels
+    bounds: [[-90, -180], [90, 180]]
   }).addTo(map);
 
   initCoralLayers();
@@ -138,7 +151,7 @@ async function loadCoralGeoJSON(layerId) {
         // Häfen
         if (layerId === 'harbours') {
           const name = props.PORT_NAME || props.name || 'Unbekannter Hafen';
-          const country = props.COUNTRY || props.country || '';
+          const country = props.COUNTRY || props.country || 'Land unbekannt';
           let popupHTML = `<div class="popup-title">⚓ ${name}</div><div class="popup-info">`;
           if (country) popupHTML += `🌍 ${country}<br>`;
           popupHTML += `</div>`;
@@ -148,7 +161,7 @@ async function loadCoralGeoJSON(layerId) {
         
         // Korallenriffe
         const name = props.COUNTRY || props.NAME || 'Korallenriff';
-        const type = props.TYPE || props.type || 'unbekannt';
+        const type = props.TYPE || props.type || 'Warmwasserkoralle';
         layer.bindPopup(`
           <div class="popup-title">${name}</div>
           <div class="popup-info">
