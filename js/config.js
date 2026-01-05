@@ -69,6 +69,26 @@ export const layers = {
     icon: "⚓"
   },
 
+  // 🤿 TAUCHSPOTS - NEU
+  "dive-sites": {
+    id: "dive-sites",
+    name: "Tauchspots",
+    type: "overpass",
+    apiUrl: "https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node[%22sport%22=%22scuba_diving%22];way[%22sport%22=%22scuba_diving%22];relation[%22sport%22=%22scuba_diving%22];);out%20geom;",
+    style: {
+      color: "#00BCD4",
+      fillColor: "#00BCD4",
+      fillOpacity: 0.8,
+      radius: 6
+    },
+    legend: {
+      title: "Tauchspots weltweit",
+      description: "Tauchplätze und Tauchzentren aus OpenStreetMap",
+      color: "#00BCD4"
+    },
+    icon: "🤿"
+  },
+
   // 🌡️ WASSERTEMPERATUR (SST) - JETZT FUNKTIONIEREND!
   sst: {
     id: "sst",

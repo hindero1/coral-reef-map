@@ -363,6 +363,107 @@ async function loadWaterQuality() {
 }
 
 // ============================================================================
+// TAUCHSPOTS (OVERPASS API) - NEU
+// ============================================================================
+
+async function loadDiveSites() {
+  console.log('🤿 Lade Tauchspots...');
+  showLoading();
+  
+  try {
+    const apiUrl = "https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node[%22sport%22=%22scuba_diving%22];way[%22sport%22=%22scuba_diving%22];relation[%22sport%22=%22scuba_diving%22];);out%20geom;";
+    
+    console.log('📡 Rufe Overpass API auf...');
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ ${data.elements?.length || 0} Tauchspots gefunden`);
+    
+    if (!data.elements || data.elements.length === 0) {
+      alert('ℹ️ Keine Tauchspots gefunden in den aktuellen Daten.\n\nDie Overpass API liefert weltweite Daten zurück.');
+      hideLoading();
+      return;
+    }
+    
+    // Erstelle Marker für jeden Tauchspot
+    const markers = [];
+    
+    data.elements.forEach(element => {
+      let lat, lon;
+      
+      // Koordinaten extrahieren
+      if (element.type === 'node') {
+        lat = element.lat;
+        lon = element.lon;
+      } else if (element.center) {
+        lat = element.center.lat;
+        lon = element.center.lon;
+      } else if (element.geometry && element.geometry.length > 0) {
+        // Für ways: ersten Punkt nehmen
+        lat = element.geometry[0].lat;
+        lon = element.geometry[0].lon;
+      } else {
+        return; // Skip wenn keine Koordinaten
+      }
+      
+      // Marker erstellen
+      const icon = L.divIcon({
+        html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">🤿</div>`,
+        className: '',
+        iconSize: [25, 25],
+        iconAnchor: [12, 12]
+      });
+      
+      const marker = L.marker([lat, lon], { icon });
+      
+      // Popup mit Infos
+      const tags = element.tags || {};
+      const name = tags.name || tags['name:en'] || 'Unbenannter Tauchspot';
+      const operator = tags.operator || '';
+      const website = tags.website || tags.contact?.website || '';
+      const description = tags.description || '';
+      
+      let popupHTML = `
+        <div class="popup-title">🤿 ${name}</div>
+        <div class="popup-info">
+      `;
+      
+      if (description) popupHTML += `${description}<br>`;
+      if (operator) popupHTML += `🏢 Betreiber: ${operator}<br>`;
+      if (website) popupHTML += `🌐 <a href="${website}" target="_blank" rel="noopener">Website</a><br>`;
+      
+      popupHTML += `
+        <small>📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}</small><br>
+        <small style="color: #999;">Quelle: OpenStreetMap</small>
+        </div>
+      `;
+      
+      marker.bindPopup(popupHTML);
+      markers.push(marker);
+    });
+    
+    console.log(`✅ ${markers.length} Tauchspot-Marker erstellt`);
+    
+    // Layer-Gruppe erstellen und zur Karte hinzufügen
+    const layerGroup = L.layerGroup(markers);
+    layerGroup.addTo(map);
+    activeOverlays.set('dive-sites', layerGroup);
+    
+    updateLegend(layers['dive-sites']);
+    
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Tauchspots Fehler:', error);
+    hideLoading();
+    alert(`Fehler beim Laden der Tauchspots!\n\nMögliche Gründe:\n- Overpass API nicht erreichbar\n- Timeout\n- Netzwerkfehler\n\nFehler: ${error.message}`);
+  }
+}
+
+// ============================================================================
 // POI LAYER
 // ============================================================================
 
@@ -550,12 +651,12 @@ function setupCheckboxListeners() {
     });
   }
 
-  // Tauchspots
+  // Tauchspots (NEU!)
   const diveSitesCheckbox = document.getElementById('layer-dive-sites');
   if (diveSitesCheckbox) {
-    diveSitesCheckbox.addEventListener('change', (e) => {
+    diveSitesCheckbox.addEventListener('change', async (e) => {
       if (e.target.checked) {
-        loadPOILayer('dive-sites');
+        await loadDiveSites();
       } else {
         if (activeOverlays.has('dive-sites')) {
           map.removeLayer(activeOverlays.get('dive-sites'));
@@ -563,6 +664,7 @@ function setupCheckboxListeners() {
         }
       }
     });
+    console.log('✅ Tauchspots Listener registriert');
   }
 
   console.log('✅ Alle Event-Listener eingerichtet');
