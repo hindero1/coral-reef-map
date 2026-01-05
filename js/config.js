@@ -54,19 +54,29 @@ export const layers = {
     name: "Häfen",
     type: "geojson",
     url: "./data/ports_all.json",
+    minZoom: 5,  // Nur ab Zoom 5 anzeigen
     style: {
       color: "#FF9800",
       weight: 1,
       fillColor: "#FF9800",
-      fillOpacity: 0.6,
-      radius: 4
+      fillOpacity: 0.7,
+      radius: 3
     },
     legend: {
       title: "Häfen weltweit",
-      description: "Globale Häfen-Datenbank",
+      description: "Globale Häfen-Datenbank (sichtbar ab Zoom 5, gruppiert bis Zoom 7)",
       color: "#FF9800"
     },
-    icon: "⚓"
+    icon: "⚓",  // Emoji beibehalten
+    iconSize: 12,  // Kleiner machen
+    clustering: {
+      enabled: true,
+      maxClusterRadius: 50,  // Radius für Gruppierung
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      disableClusteringAtZoom: 8  // Ab Zoom 8 keine Cluster mehr
+    }
   },
 
   // 🤿 TAUCHSPOTS - NEU
