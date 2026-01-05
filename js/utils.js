@@ -474,3 +474,207 @@ export function createOverpassMarkers(elements, iconHtml, iconSize = [25, 25]) {
   console.log(`✅ ${markers.length} Marker erstellt`);
   return markers;
 }
+
+/**
+ * Parse CSV-Daten zu Array von Objekten
+ */
+export function parseCSV(csvText) {
+  const lines = csvText.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(',').map(h => h.trim());
+  const data = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]);
+    if (values.length !== headers.length) continue;
+
+    const obj = {};
+    headers.forEach((header, index) => {
+      obj[header] = values[index];
+    });
+    data.push(obj);
+  }
+
+  return data;
+}
+
+/**
+ * Parse eine einzelne CSV-Zeile (behandelt Quotes korrekt)
+ */
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current.trim());
+  return result;
+}
+
+/**
+ * Erstellt Marker aus CSV-Daten (für Incidents)
+ */
+export function createCSVMarkers(csvData, styleFunction) {
+  const markers = [];
+
+  csvData.forEach(row => {
+    const lat = parseFloat(row.lat);
+    const lon = parseFloat(row.lon);
+
+    if (isNaN(lat) || isNaN(lon)) return;
+
+    // Erstelle temporäres Feature-Objekt für Style-Funktion
+    const feature = {
+      properties: row,
+      geometry: {
+        type: 'Point',
+        coordinates: [lon, lat]
+      }
+    };
+
+    const style = styleFunction(feature);
+    const iconHtml = style.iconHtml || '⚠️';
+
+    const icon = L.divIcon({
+      html: `<div style="font-size: 20px; text-shadow: 0 0 3px white, 0 0 5px rgba(0,0,0,0.5);">${iconHtml}</div>`,
+      className: '',
+      iconSize: [25, 25],
+      iconAnchor: [12.5, 12.5]
+    });
+
+    const marker = L.marker([lat, lon], { icon });
+
+    // Erstelle Popup
+    let popupHTML = `
+      <div class="popup-title">${row.name || 'Incident'}</div>
+      <div class="popup-info">
+        📅 <strong>Datum:</strong> ${row.open_date || 'Unbekannt'}<br>
+        ${iconHtml} <strong>Typ:</strong> ${row.threat || 'Unbekannt'}<br>
+    `;
+
+    if (row.location) {
+      popupHTML += `📍 <strong>Ort:</strong> ${row.location}<br>`;
+    }
+
+    if (row.commodity) {
+      popupHTML += `🛢️ <strong>Substanz:</strong> ${row.commodity}<br>`;
+    }
+
+    if (row.max_ptl_release_gallons && parseFloat(row.max_ptl_release_gallons) > 0) {
+      popupHTML += `💧 <strong>Menge:</strong> ${parseFloat(row.max_ptl_release_gallons).toLocaleString()} Gallonen<br>`;
+    }
+
+    if (row.description) {
+      const shortDesc = row.description.length > 200 
+        ? row.description.substring(0, 200) + '...' 
+        : row.description;
+      popupHTML += `<br><small>${shortDesc}</small><br>`;
+    }
+
+    popupHTML += `
+        <br><small>Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}</small>
+      </div>
+    `;
+
+    marker.bindPopup(popupHTML);
+    markers.push(marker);
+  });
+
+  console.log(`✅ ${markers.length} CSV-Marker erstellt`);
+  return markers;
+}
+
+/**
+ * Erstellt erweiterte Popup-Inhalte für Mikroplastik-Daten
+ */
+export function createMicroplasticPopup(feature) {
+  const props = feature.properties;
+  
+  let popupHTML = `
+    <div class="popup-title">🔬 Mikroplastik-Messung</div>
+    <div class="popup-info">
+  `;
+
+  // Konzentration
+  const concentration = props.Microplastics_measurement 
+    ? parseFloat(props.Microplastics_measurement).toFixed(4) 
+    : 'N/A';
+  
+  popupHTML += `
+    <strong>Konzentration:</strong> ${concentration} ${props.Unit || 'pieces/m³'}<br>
+    <strong>Klasse:</strong> <span style="color: ${getColorForConcentration(props.Concentration_class_text)};">
+      ${props.Concentration_class_text || 'Unbekannt'}
+    </span><br>
+  `;
+
+  // Ort
+  if (props.Location_Oceans) {
+    popupHTML += `🌊 <strong>Ozean:</strong> ${props.Location_Oceans}<br>`;
+  }
+  if (props.Location_Regions) {
+    popupHTML += `📍 <strong>Region:</strong> ${props.Location_Regions}<br>`;
+  }
+  if (props.Country) {
+    popupHTML += `🏴 <strong>Land:</strong> ${props.Country}<br>`;
+  }
+
+  // Sampling-Details
+  popupHTML += `<br><strong>Probenahme:</strong><br>`;
+  
+  if (props.Medium) {
+    popupHTML += `🧪 Medium: ${props.Medium}<br>`;
+  }
+  
+  if (props.Sampling_Method) {
+    popupHTML += `🔬 Methode: ${props.Sampling_Method}<br>`;
+  }
+
+  if (props.Water_Sample_Depth__m_) {
+    popupHTML += `📏 Tiefe: ${props.Water_Sample_Depth__m_}m<br>`;
+  }
+
+  if (props.Mesh_size__mm_) {
+    popupHTML += `🎣 Netzgröße: ${props.Mesh_size__mm_}mm<br>`;
+  }
+
+  // Quelle
+  if (props.Short_Reference) {
+    popupHTML += `<br><small>📚 Quelle: ${props.Short_Reference}</small><br>`;
+  }
+
+  // Koordinaten
+  const lat = props.Latitude__degree_ || feature.geometry.coordinates[1];
+  const lon = props.Longitude_degree_ || feature.geometry.coordinates[0];
+  popupHTML += `<br><small>Lat: ${parseFloat(lat).toFixed(4)}, Lon: ${parseFloat(lon).toFixed(4)}</small>`;
+
+  popupHTML += `</div>`;
+  
+  return popupHTML;
+}
+
+/**
+ * Hilfsfunktion: Farbe basierend auf Konzentrations-Klasse
+ */
+function getColorForConcentration(classText) {
+  switch(classText) {
+    case "Very Low": return "#00FF00";
+    case "Low": return "#AAFF00";
+    case "Medium": return "#FFFF00";
+    case "High": return "#FF8800";
+    case "Very High": return "#FF0000";
+    default: return "#888888";
+  }
+}

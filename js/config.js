@@ -210,6 +210,114 @@ export const layers = {
       ],
       interpretation: "Kombiniert Temperatur + Hitzestress + Licht. BLAU = GUT (keine Gefahr), ROT = GEFAHR (Bleiche)"
     }
+  },
+
+  // 🔬 MIKROPLASTIK-VERSCHMUTZUNG
+  "microplastics": {
+    id: "microplastics",
+    name: "Mikroplastik-Verschmutzung",
+    type: "geojson",
+    url: "./data/Marine_Microplastics.geojson",
+    style: function(feature) {
+      const concentration = feature.properties.Concentration_class_text;
+      let color, radius;
+      
+      switch(concentration) {
+        case "Very Low":
+          color = "#00FF00";
+          radius = 3;
+          break;
+        case "Low":
+          color = "#AAFF00";
+          radius = 4;
+          break;
+        case "Medium":
+          color = "#FFFF00";
+          radius = 5;
+          break;
+        case "High":
+          color = "#FF8800";
+          radius = 6;
+          break;
+        case "Very High":
+          color = "#FF0000";
+          radius = 7;
+          break;
+        default:
+          color = "#888888";
+          radius = 3;
+      }
+      
+      return {
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.7,
+        weight: 1,
+        radius: radius
+      };
+    },
+    legend: {
+      title: "Mikroplastik-Konzentration",
+      description: "Globale Messungen von Mikroplastik in Meerwasser und Sedimenten",
+      source: "Verschiedene wissenschaftliche Studien",
+      unit: "pieces/m³ oder pieces/kg",
+      levels: [
+        { value: "Very Low", color: "#00FF00", label: "Sehr niedrig (0-0.0005 pieces/m³)" },
+        { value: "Low", color: "#AAFF00", label: "Niedrig (0.0005-0.005 pieces/m³)" },
+        { value: "Medium", color: "#FFFF00", label: "Mittel (0.005-1 pieces/m³)" },
+        { value: "High", color: "#FF8800", label: "Hoch (1-10 pieces/m³)" },
+        { value: "Very High", color: "#FF0000", label: "Sehr hoch (>10 pieces/m³)" }
+      ],
+      interpretation: "Mikroplastik gefährdet marine Organismen und kann in die Nahrungskette gelangen"
+    },
+    icon: "🔬"
+  },
+
+  // 🛢️ ÖL- UND CHEMIE-VORFÄLLE
+  "incidents": {
+    id: "incidents",
+    name: "Öl- & Chemie-Vorfälle",
+    type: "csv",
+    url: "./data/incidents.csv",
+    style: function(feature) {
+      const threat = feature.properties.threat;
+      let color, iconHtml;
+      
+      switch(threat) {
+        case "Oil":
+          color = "#000000";
+          iconHtml = "🛢️";
+          break;
+        case "Chemical":
+          color = "#9C27B0";
+          iconHtml = "⚗️";
+          break;
+        default:
+          color = "#666666";
+          iconHtml = "⚠️";
+      }
+      
+      return {
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.8,
+        weight: 2,
+        radius: 6,
+        iconHtml: iconHtml
+      };
+    },
+    legend: {
+      title: "Öl- und Chemie-Vorfälle",
+      description: "NOAA Incident News - Verschmutzungsvorfälle weltweit",
+      source: "NOAA Office of Response and Restoration",
+      levels: [
+        { value: "Oil", color: "#000000", label: "🛢️ Ölverschmutzung" },
+        { value: "Chemical", color: "#9C27B0", label: "⚗️ Chemische Verschmutzung" },
+        { value: "Other", color: "#666666", label: "⚠️ Andere Vorfälle" }
+      ],
+      interpretation: "Dokumentierte Umweltvorfälle mit potenzieller Gefahr für marine Ökosysteme"
+    },
+    icon: "🛢️"
   }
 };
 

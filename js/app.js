@@ -12,7 +12,10 @@ import {
   hideLoading,
   updateLegend,
   fetchOverpassData,
-  createOverpassMarkers
+  createOverpassMarkers,
+  parseCSV,
+  createCSVMarkers,
+  createMicroplasticPopup
 } from './utils.js';
 
 // ============================================================================
@@ -85,6 +88,23 @@ async function loadCoralGeoJSON(layerId) {
       },
       
       pointToLayer: (feature, latlng) => {
+        // Mikroplastik Layer - spezielle Darstellung
+        if (layerId === 'microplastics') {
+          const style = typeof layerConfig.style === 'function' 
+            ? layerConfig.style(feature) 
+            : layerConfig.style;
+          
+          return L.circleMarker(latlng, {
+            radius: style.radius || 4,
+            fillColor: style.fillColor,
+            color: style.color,
+            weight: style.weight || 1,
+            opacity: 0.8,
+            fillOpacity: style.fillOpacity || 0.7
+          });
+        }
+        
+        // Häfen mit Icon
         if (layerId === 'harbours' && layerConfig.icon) {
           const icon = L.divIcon({
             html: `<div style="font-size: 18px; text-shadow: 0 0 3px white;">${layerConfig.icon}</div>`,
@@ -95,6 +115,7 @@ async function loadCoralGeoJSON(layerId) {
           return L.marker(latlng, { icon });
         }
         
+        // Standard CircleMarker
         return L.circleMarker(latlng, {
           radius: layerConfig.style.radius || 1.5,
           fillColor: layerConfig.style.fillColor,
@@ -108,6 +129,13 @@ async function loadCoralGeoJSON(layerId) {
       onEachFeature: (feature, layer) => {
         const props = feature.properties || {};
         
+        // Mikroplastik - erweiterte Popup-Funktion
+        if (layerId === 'microplastics') {
+          layer.bindPopup(createMicroplasticPopup(feature));
+          return;
+        }
+        
+        // Häfen
         if (layerId === 'harbours') {
           const name = props.PORT_NAME || props.name || 'Unbekannter Hafen';
           const country = props.COUNTRY || props.country || '';
@@ -118,6 +146,7 @@ async function loadCoralGeoJSON(layerId) {
           return;
         }
         
+        // Korallenriffe
         const name = props.COUNTRY || props.NAME || 'Korallenriff';
         const type = props.TYPE || props.type || 'unbekannt';
         layer.bindPopup(`
@@ -366,6 +395,60 @@ async function loadWaterQuality() {
     hideLoading();
   } catch (error) {
     console.error('❌ Wasserqualität Fehler:', error);
+    hideLoading();
+  }
+}
+
+// ============================================================================
+// ÖL- UND CHEMIE-VORFÄLLE (CSV) - NEU
+// ============================================================================
+
+async function loadIncidents() {
+  console.log('🛢️ Lade Öl- und Chemie-Vorfälle...');
+  showLoading();
+  
+  try {
+    const layerConfig = layers['incidents'];
+    const response = await fetch(layerConfig.url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const csvText = await response.text();
+    const csvData = parseCSV(csvText);
+    
+    console.log(`✅ ${csvData.length} Vorfälle aus CSV geladen`);
+    
+    if (csvData.length === 0) {
+      console.warn('⚠️ Keine Daten in CSV gefunden');
+      hideLoading();
+      return;
+    }
+    
+    // Filtere gültige Koordinaten
+    const validData = csvData.filter(row => {
+      const lat = parseFloat(row.lat);
+      const lon = parseFloat(row.lon);
+      return !isNaN(lat) && !isNaN(lon);
+    });
+    
+    console.log(`✅ ${validData.length} Vorfälle mit gültigen Koordinaten`);
+    
+    // Erstelle Marker
+    const markers = createCSVMarkers(validData, layerConfig.style);
+    
+    // Füge alle Marker zur Karte hinzu
+    const layerGroup = L.layerGroup(markers);
+    layerGroup.addTo(map);
+    activeOverlays.set('incidents', layerGroup);
+    
+    updateLegend(layerConfig);
+    
+    console.log(`✅ ${markers.length} Incident-Marker zur Karte hinzugefügt`);
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Incidents:', error);
     hideLoading();
   }
 }
@@ -673,6 +756,38 @@ function setupCheckboxListeners() {
       }
     });
     console.log('✅ Tauchspots Listener registriert');
+  }
+
+  // Mikroplastik (NEU!)
+  const microplasticsCheckbox = document.getElementById('layer-microplastics');
+  if (microplasticsCheckbox) {
+    microplasticsCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        loadCoralGeoJSON('microplastics');
+      } else {
+        if (activeOverlays.has('microplastics')) {
+          map.removeLayer(activeOverlays.get('microplastics'));
+          activeOverlays.delete('microplastics');
+        }
+      }
+    });
+    console.log('✅ Mikroplastik Listener registriert');
+  }
+
+  // Öl- und Chemie-Vorfälle (NEU!)
+  const incidentsCheckbox = document.getElementById('layer-incidents');
+  if (incidentsCheckbox) {
+    incidentsCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await loadIncidents();
+      } else {
+        if (activeOverlays.has('incidents')) {
+          map.removeLayer(activeOverlays.get('incidents'));
+          activeOverlays.delete('incidents');
+        }
+      }
+    });
+    console.log('✅ Incidents Listener registriert');
   }
 
   console.log('✅ Alle Event-Listener eingerichtet');
