@@ -165,6 +165,30 @@ export const layers = {
       ],
       interpretation: "Hohe Werte = schlechte Sicht, mehr Sedimente/Partikel im Wasser"
     }
+  },
+
+  // 🌊 WASSERQUALITÄT (Kombiniert) - NEU
+  "water-quality": {
+    id: "water-quality",
+    name: "Wasserqualität",
+    type: "wms",
+    enabled: true,
+    wmsUrl: "https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km",
+    wmsLayers: "CRW_BAA",
+    legend: {
+      title: "Wasserqualität (Bleaching Alert Area)",
+      description: "NOAA Coral Reef Watch - Kombinierter Wasserqualitäts-Indikator",
+      source: "5km Resolution, täglich aktualisiert",
+      unit: "Alert Level",
+      levels: [
+        { value: "0", color: "#00FF00", label: "Keine Warnung - Gut" },
+        { value: "1", color: "#FFFF00", label: "Watch - Beobachten" },
+        { value: "2", color: "#FF8800", label: "Warning - Warnung" },
+        { value: "3", color: "#FF0000", label: "Alert Level 1" },
+        { value: "4", color: "#AA0000", label: "Alert Level 2" }
+      ],
+      interpretation: "Zeigt kombinierte Stress-Faktoren für Korallen (Temperatur, Licht, Wasserqualität)"
+    }
   }
 };
 

@@ -299,13 +299,13 @@ async function loadTurbidity() {
     const wmsUrl = 'https://coastwatch.noaa.gov/erddap/wms/erdVH2kd4908day/request';
     
     const turbidityLayer = L.tileLayer.wms(wmsUrl, {
-      layers: 'erdVH2kd4908day:kd_490',  // Korrekter Layer-Name
+      layers: 'erdVH2kd4908kd490:kd_490',
       format: 'image/png',
       transparent: true,
       opacity: 0.6,
       version: '1.3.0',
       styles: 'boxfill/rainbow',
-      colorscalerange: '0.01,1.0',  // m⁻¹
+      colorscalerange: '0.01,0.5',  // m⁻¹
       numcolorbands: 250,
       logscale: true,
       belowmincolor: 'transparent',
@@ -320,6 +320,44 @@ async function loadTurbidity() {
     hideLoading();
   } catch (error) {
     console.error('❌ Trübung Fehler:', error);
+    hideLoading();
+  }
+}
+
+// ============================================================================
+// WASSERQUALITÄT (KOMBINIERT) - NEU
+// ============================================================================
+
+async function loadWaterQuality() {
+  console.log('🌊 Lade Wasserqualität...');
+  showLoading();
+  
+  try {
+    const wmsUrl = 'https://pae-paha.pacioos.hawaii.edu/thredds/wms/dhw_5km';
+    
+    const waterQualityLayer = L.tileLayer.wms(wmsUrl, {
+      layers: 'CRW_BAA',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.7,
+      version: '1.3.0',
+      styles: 'boxfill/rainbow',
+      colorscalerange: '0,4',
+      numcolorbands: 5,
+      belowmincolor: 'transparent',
+      abovemaxcolor: 'extend',
+      attribution: 'NOAA Coral Reef Watch - Bleaching Alert'
+    });
+    
+    waterQualityLayer.addTo(map);
+    activeOverlays.set('water-quality', waterQualityLayer);
+    
+    updateLegend(layers['water-quality']);
+    
+    console.log('✅ Wasserqualität geladen');
+    hideLoading();
+  } catch (error) {
+    console.error('❌ Wasserqualität Fehler:', error);
     hideLoading();
   }
 }
@@ -479,6 +517,22 @@ function setupCheckboxListeners() {
       }
     });
     console.log('✅ Trübung Listener registriert');
+  }
+
+  // Wasserqualität (NEU!)
+  const waterQualityCheckbox = document.getElementById('layer-water-quality');
+  if (waterQualityCheckbox) {
+    waterQualityCheckbox.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await loadWaterQuality();
+      } else {
+        if (activeOverlays.has('water-quality')) {
+          map.removeLayer(activeOverlays.get('water-quality'));
+          activeOverlays.delete('water-quality');
+        }
+      }
+    });
+    console.log('✅ Wasserqualität Listener registriert');
   }
 
   // Häfen
