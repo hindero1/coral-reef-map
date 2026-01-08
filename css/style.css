@@ -171,11 +171,13 @@ body {
 .leaflet-popup-content-wrapper {
     border-radius: 8px;
     padding: 0;
+    box-shadow: 0 3px 14px rgba(0,0,0,0.2);
 }
 
 .leaflet-popup-content {
     margin: 1rem;
     font-size: 0.9rem;
+    min-width: 200px;
 }
 
 .popup-title {
@@ -188,6 +190,42 @@ body {
 .popup-info {
     color: #666;
     line-height: 1.6;
+}
+
+/* Enhanced Popup Close Button */
+.leaflet-popup-close-button {
+    color: #666 !important;
+    font-size: 24px !important;
+    font-weight: bold !important;
+    padding: 4px 8px !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    right: 2px !important;
+    top: 2px !important;
+}
+
+.leaflet-popup-close-button:hover {
+    color: #fff !important;
+    background: #ff5252 !important;
+    transform: scale(1.1);
+}
+
+.leaflet-popup-close-button:focus {
+    outline: 2px solid #1e3c72 !important;
+    outline-offset: 2px;
+}
+
+/* Make popup links safe */
+.popup-info a {
+    color: #1e3c72;
+    text-decoration: underline;
+}
+
+.popup-info a:hover {
+    color: #2a5298;
 }
 
 /* Coral Circles - damit sie gut sichtbar sind */

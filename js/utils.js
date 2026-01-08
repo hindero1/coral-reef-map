@@ -195,7 +195,7 @@ export function updateLegend(layerConfig) {
   const legendContent = document.getElementById('legend-content');
   if (!legendContent || !layerConfig || !layerConfig.legend) return;
 
-  const { title, description, source, unit, range, levels, color, interpretation } = layerConfig.legend;
+  const { title, description, source, sourceUrl, unit, range, levels, color, interpretation } = layerConfig.legend;
 
   let html = `<div class="legend-item"><strong>${title}</strong></div>`;
 
@@ -204,7 +204,13 @@ export function updateLegend(layerConfig) {
   }
 
   if (source) {
-    html += `<div class="legend-item" style="font-size: 0.75rem; color: #999; margin-top: 0.2rem;">📊 ${source}</div>`;
+    if (sourceUrl) {
+      // Zeige Quelle als klickbaren Link
+      html += `<div class="legend-item" style="font-size: 0.75rem; color: #999; margin-top: 0.2rem;">📊 <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" style="color: #1e3c72; text-decoration: none;">${source}</a></div>`;
+    } else {
+      // Zeige Quelle nur als Text (Fallback)
+      html += `<div class="legend-item" style="font-size: 0.75rem; color: #999; margin-top: 0.2rem;">📊 ${source}</div>`;
+    }
   }
 
   if (unit) {
@@ -424,51 +430,58 @@ export function createOverpassMarkers(elements, iconHtml, iconSize = [25, 25]) {
   const markers = [];
 
   elements.forEach(element => {
-    let lat, lon;
+    try {
+      let lat, lon;
 
-    // Koordinaten extrahieren (node, way center, oder relation center)
-    if (element.lat && element.lon) {
-      lat = element.lat;
-      lon = element.lon;
-    } else if (element.center) {
-      lat = element.center.lat;
-      lon = element.center.lon;
-    } else {
-      return; // Überspringe wenn keine Koordinaten
+      // Koordinaten extrahieren (node, way center, oder relation center)
+      if (element.lat && element.lon) {
+        lat = element.lat;
+        lon = element.lon;
+      } else if (element.center) {
+        lat = element.center.lat;
+        lon = element.center.lon;
+      } else {
+        return; // Überspringe wenn keine Koordinaten
+      }
+
+      const icon = L.divIcon({
+        html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">${iconHtml}</div>`,
+        className: '',
+        iconSize: iconSize,
+        iconAnchor: [iconSize[0] / 2, iconSize[1] / 2]
+      });
+
+      const marker = L.marker([lat, lon], { icon });
+
+      // Popup mit Infos
+      const tags = element.tags || {};
+      const name = escapeHtml(tags.name || tags['name:en'] || 'Unbenannt');
+      const type = escapeHtml(tags.tourism || tags.amenity || tags.sport || tags['seamark:type'] || 'POI');
+      const operator = escapeHtml(tags.operator || '');
+      const website = tags.website || tags.contact?.website || '';
+
+      let popupHTML = `
+        <div class="popup-title">${name}</div>
+        <div class="popup-info">
+          📍 ${type}<br>
+      `;
+
+      if (operator) popupHTML += `🏢 ${operator}<br>`;
+      if (website) {
+        const safeWebsite = escapeHtml(website);
+        popupHTML += `🌐 <a href="${safeWebsite}" target="_blank" rel="noopener noreferrer">Website</a><br>`;
+      }
+
+      popupHTML += `
+          <small>Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}</small>
+        </div>
+      `;
+
+      safeBindPopup(marker, popupHTML);
+      markers.push(marker);
+    } catch (error) {
+      console.error('❌ Error creating Overpass marker:', error);
     }
-
-    const icon = L.divIcon({
-      html: `<div style="font-size: 20px; text-shadow: 0 0 3px white;">${iconHtml}</div>`,
-      className: '',
-      iconSize: iconSize,
-      iconAnchor: [iconSize[0] / 2, iconSize[1] / 2]
-    });
-
-    const marker = L.marker([lat, lon], { icon });
-
-    // Popup mit Infos
-    const tags = element.tags || {};
-    const name = tags.name || tags['name:en'] || 'Unbenannt';
-    const type = tags.tourism || tags.amenity || tags.sport || tags['seamark:type'] || 'POI';
-    const operator = tags.operator || '';
-    const website = tags.website || tags.contact?.website || '';
-
-    let popupHTML = `
-      <div class="popup-title">${name}</div>
-      <div class="popup-info">
-        📍 ${type}<br>
-    `;
-
-    if (operator) popupHTML += `🏢 ${operator}<br>`;
-    if (website) popupHTML += `🌐 <a href="${website}" target="_blank">Website</a><br>`;
-
-    popupHTML += `
-        <small>Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}</small>
-      </div>
-    `;
-
-    marker.bindPopup(popupHTML);
-    markers.push(marker);
   });
 
   console.log(`✅ ${markers.length} Marker erstellt`);
@@ -531,66 +544,78 @@ export function createCSVMarkers(csvData, styleFunction) {
   const markers = [];
 
   csvData.forEach(row => {
-    const lat = parseFloat(row.lat);
-    const lon = parseFloat(row.lon);
+    try {
+      const lat = parseFloat(row.lat);
+      const lon = parseFloat(row.lon);
 
-    if (isNaN(lat) || isNaN(lon)) return;
+      if (isNaN(lat) || isNaN(lon)) return;
 
-    // Erstelle temporäres Feature-Objekt für Style-Funktion
-    const feature = {
-      properties: row,
-      geometry: {
-        type: 'Point',
-        coordinates: [lon, lat]
+      // Erstelle temporäres Feature-Objekt für Style-Funktion
+      const feature = {
+        properties: row,
+        geometry: {
+          type: 'Point',
+          coordinates: [lon, lat]
+        }
+      };
+
+      const style = styleFunction(feature);
+      const iconHtml = style.iconHtml || '⚠️';
+
+      const icon = L.divIcon({
+        html: `<div style="font-size: 20px; text-shadow: 0 0 3px white, 0 0 5px rgba(0,0,0,0.5);">${iconHtml}</div>`,
+        className: '',
+        iconSize: [25, 25],
+        iconAnchor: [12.5, 12.5]
+      });
+
+      const marker = L.marker([lat, lon], { icon });
+
+      // Erstelle Popup mit HTML Escaping
+      const name = escapeHtml(row.name || 'Incident');
+      const openDate = escapeHtml(row.open_date || 'Unbekannt');
+      const threat = escapeHtml(row.threat || 'Unbekannt');
+      const location = escapeHtml(row.location || '');
+      const commodity = escapeHtml(row.commodity || '');
+
+      let popupHTML = `
+        <div class="popup-title">${name}</div>
+        <div class="popup-info">
+          📅 <strong>Datum:</strong> ${openDate}<br>
+          ${iconHtml} <strong>Typ:</strong> ${threat}<br>
+      `;
+
+      if (location) {
+        popupHTML += `📍 <strong>Ort:</strong> ${location}<br>`;
       }
-    };
 
-    const style = styleFunction(feature);
-    const iconHtml = style.iconHtml || '⚠️';
+      if (commodity) {
+        popupHTML += `🛢️ <strong>Substanz:</strong> ${commodity}<br>`;
+      }
 
-    const icon = L.divIcon({
-      html: `<div style="font-size: 20px; text-shadow: 0 0 3px white, 0 0 5px rgba(0,0,0,0.5);">${iconHtml}</div>`,
-      className: '',
-      iconSize: [25, 25],
-      iconAnchor: [12.5, 12.5]
-    });
+      if (row.max_ptl_release_gallons && parseFloat(row.max_ptl_release_gallons) > 0) {
+        const gallons = parseFloat(row.max_ptl_release_gallons).toLocaleString();
+        popupHTML += `💧 <strong>Menge:</strong> ${gallons} Gallonen<br>`;
+      }
 
-    const marker = L.marker([lat, lon], { icon });
+      if (row.description) {
+        const shortDesc = row.description.length > 200
+          ? row.description.substring(0, 200) + '...'
+          : row.description;
+        const escapedDesc = escapeHtml(shortDesc);
+        popupHTML += `<br><small>${escapedDesc}</small><br>`;
+      }
 
-    // Erstelle Popup
-    let popupHTML = `
-      <div class="popup-title">${row.name || 'Incident'}</div>
-      <div class="popup-info">
-        📅 <strong>Datum:</strong> ${row.open_date || 'Unbekannt'}<br>
-        ${iconHtml} <strong>Typ:</strong> ${row.threat || 'Unbekannt'}<br>
-    `;
+      popupHTML += `
+          <br><small>Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}</small>
+        </div>
+      `;
 
-    if (row.location) {
-      popupHTML += `📍 <strong>Ort:</strong> ${row.location}<br>`;
+      safeBindPopup(marker, popupHTML);
+      markers.push(marker);
+    } catch (error) {
+      console.error('❌ Error creating CSV marker:', error);
     }
-
-    if (row.commodity) {
-      popupHTML += `🛢️ <strong>Substanz:</strong> ${row.commodity}<br>`;
-    }
-
-    if (row.max_ptl_release_gallons && parseFloat(row.max_ptl_release_gallons) > 0) {
-      popupHTML += `💧 <strong>Menge:</strong> ${parseFloat(row.max_ptl_release_gallons).toLocaleString()} Gallonen<br>`;
-    }
-
-    if (row.description) {
-      const shortDesc = row.description.length > 200 
-        ? row.description.substring(0, 200) + '...' 
-        : row.description;
-      popupHTML += `<br><small>${shortDesc}</small><br>`;
-    }
-
-    popupHTML += `
-        <br><small>Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}</small>
-      </div>
-    `;
-
-    marker.bindPopup(popupHTML);
-    markers.push(marker);
   });
 
   console.log(`✅ ${markers.length} CSV-Marker erstellt`);
@@ -601,68 +626,76 @@ export function createCSVMarkers(csvData, styleFunction) {
  * Erstellt erweiterte Popup-Inhalte für Mikroplastik-Daten
  */
 export function createMicroplasticPopup(feature) {
-  const props = feature.properties;
-  
-  let popupHTML = `
-    <div class="popup-title">🔬 Mikroplastik-Messung</div>
-    <div class="popup-info">
-  `;
+  try {
+    const props = feature.properties;
 
-  // Konzentration
-  const concentration = props.Microplastics_measurement 
-    ? parseFloat(props.Microplastics_measurement).toFixed(4) 
-    : 'N/A';
-  
-  popupHTML += `
-    <strong>Konzentration:</strong> ${concentration} ${props.Unit || 'pieces/m³'}<br>
-    <strong>Klasse:</strong> <span style="color: ${getColorForConcentration(props.Concentration_class_text)};">
-      ${props.Concentration_class_text || 'Unbekannt'}
-    </span><br>
-  `;
+    let popupHTML = `
+      <div class="popup-title">🔬 Mikroplastik-Messung</div>
+      <div class="popup-info">
+    `;
 
-  // Ort
-  if (props.Location_Oceans) {
-    popupHTML += `🌊 <strong>Ozean:</strong> ${props.Location_Oceans}<br>`;
-  }
-  if (props.Location_Regions) {
-    popupHTML += `📍 <strong>Region:</strong> ${props.Location_Regions}<br>`;
-  }
-  if (props.Country) {
-    popupHTML += `🏴 <strong>Land:</strong> ${props.Country}<br>`;
-  }
+    // Konzentration
+    const concentration = props.Microplastics_measurement
+      ? parseFloat(props.Microplastics_measurement).toFixed(4)
+      : 'N/A';
 
-  // Sampling-Details
-  popupHTML += `<br><strong>Probenahme:</strong><br>`;
-  
-  if (props.Medium) {
-    popupHTML += `🧪 Medium: ${props.Medium}<br>`;
-  }
-  
-  if (props.Sampling_Method) {
-    popupHTML += `🔬 Methode: ${props.Sampling_Method}<br>`;
-  }
+    const unit = escapeHtml(props.Unit || 'pieces/m³');
+    const concentrationClass = escapeHtml(props.Concentration_class_text || 'Unbekannt');
 
-  if (props.Water_Sample_Depth__m_) {
-    popupHTML += `📏 Tiefe: ${props.Water_Sample_Depth__m_}m<br>`;
+    popupHTML += `
+      <strong>Konzentration:</strong> ${concentration} ${unit}<br>
+      <strong>Klasse:</strong> <span style="color: ${getColorForConcentration(props.Concentration_class_text)};">
+        ${concentrationClass}
+      </span><br>
+    `;
+
+    // Ort
+    if (props.Location_Oceans) {
+      popupHTML += `🌊 <strong>Ozean:</strong> ${escapeHtml(props.Location_Oceans)}<br>`;
+    }
+    if (props.Location_Regions) {
+      popupHTML += `📍 <strong>Region:</strong> ${escapeHtml(props.Location_Regions)}<br>`;
+    }
+    if (props.Country) {
+      popupHTML += `🏴 <strong>Land:</strong> ${escapeHtml(props.Country)}<br>`;
+    }
+
+    // Sampling-Details
+    popupHTML += `<br><strong>Probenahme:</strong><br>`;
+
+    if (props.Medium) {
+      popupHTML += `🧪 Medium: ${escapeHtml(props.Medium)}<br>`;
+    }
+
+    if (props.Sampling_Method) {
+      popupHTML += `🔬 Methode: ${escapeHtml(props.Sampling_Method)}<br>`;
+    }
+
+    if (props.Water_Sample_Depth__m_) {
+      popupHTML += `📏 Tiefe: ${escapeHtml(props.Water_Sample_Depth__m_)}m<br>`;
+    }
+
+    if (props.Mesh_size__mm_) {
+      popupHTML += `🎣 Netzgröße: ${escapeHtml(props.Mesh_size__mm_)}mm<br>`;
+    }
+
+    // Quelle
+    if (props.Short_Reference) {
+      popupHTML += `<br><small>📚 Quelle: ${escapeHtml(props.Short_Reference)}</small><br>`;
+    }
+
+    // Koordinaten
+    const lat = props.Latitude__degree_ || feature.geometry.coordinates[1];
+    const lon = props.Longitude_degree_ || feature.geometry.coordinates[0];
+    popupHTML += `<br><small>Lat: ${parseFloat(lat).toFixed(4)}, Lon: ${parseFloat(lon).toFixed(4)}</small>`;
+
+    popupHTML += `</div>`;
+
+    return popupHTML;
+  } catch (error) {
+    console.error('❌ Error creating microplastic popup:', error);
+    return '<div class="popup-title">Fehler</div><div class="popup-info">Mikroplastik-Daten konnten nicht geladen werden.</div>';
   }
-
-  if (props.Mesh_size__mm_) {
-    popupHTML += `🎣 Netzgröße: ${props.Mesh_size__mm_}mm<br>`;
-  }
-
-  // Quelle
-  if (props.Short_Reference) {
-    popupHTML += `<br><small>📚 Quelle: ${props.Short_Reference}</small><br>`;
-  }
-
-  // Koordinaten
-  const lat = props.Latitude__degree_ || feature.geometry.coordinates[1];
-  const lon = props.Longitude_degree_ || feature.geometry.coordinates[0];
-  popupHTML += `<br><small>Lat: ${parseFloat(lat).toFixed(4)}, Lon: ${parseFloat(lon).toFixed(4)}</small>`;
-
-  popupHTML += `</div>`;
-  
-  return popupHTML;
 }
 
 /**
@@ -676,5 +709,51 @@ function getColorForConcentration(classText) {
     case "High": return "#FF8800";
     case "Very High": return "#FF0000";
     default: return "#888888";
+  }
+}
+
+/**
+ * Escapes HTML to prevent XSS and malformed HTML issues
+ */
+export function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  const str = String(text);
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return str.replace(/[&<>"']/g, m => map[m]);
+}
+
+/**
+ * Safely bind popup to a layer with error handling
+ */
+export function safeBindPopup(layer, htmlContent) {
+  try {
+    if (!layer || !htmlContent) {
+      console.warn('⚠️ Invalid layer or popup content');
+      return false;
+    }
+
+    layer.bindPopup(htmlContent, {
+      maxWidth: 300,
+      closeButton: true,
+      autoClose: true,
+      closeOnClick: false
+    });
+
+    return true;
+  } catch (error) {
+    console.error('❌ Error binding popup:', error);
+    // Bind a simple error popup instead
+    try {
+      layer.bindPopup('<div class="popup-title">Fehler</div><div class="popup-info">Popup konnte nicht geladen werden.</div>');
+    } catch (e) {
+      console.error('❌ Critical popup error:', e);
+    }
+    return false;
   }
 }

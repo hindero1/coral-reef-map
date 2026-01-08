@@ -1,7 +1,7 @@
 /**
  * CoralReefMap - Hauptanwendung
- * VERSION: 5.2 - Mit funktionierenden WMS-Layern
- * FIXED: WMS-URLs und Parameter korrigiert
+ * VERSION: 5.3 - Fixed Coral Types & Legend Display
+ * FIXED: Coral popups show correct type, legend only shows active layers
  */
 
 import { layers, mapConfig, performanceConfig, overpassQueries, staticPOIs } from './config.js';
@@ -94,7 +94,7 @@ function initMap() {
 }
 
 // ============================================================================
-// KORALLENRIFFE AUS GEOJSON LADEN
+// KORALLENRIFFE AUS GEOJSON LADEN - FIXED POPUP TYPES
 // ============================================================================
 
 async function loadCoralGeoJSON(layerId) {
@@ -182,22 +182,45 @@ async function loadCoralGeoJSON(layerId) {
           return;
         }
         
-        // Korallenriffe
-        const name = props.COUNTRY || props.NAME || 'Korallenriff';
-        const type = props.TYPE || props.type || 'Warmwasserkoralle';
-        layer.bindPopup(`
-          <div class="popup-title">${name}</div>
-          <div class="popup-info">
-            🪸 Typ: ${type}<br>
-            ${props.AREA_KM2 ? `📏 Fläche: ${props.AREA_KM2} km²` : ''}
-          </div>
-        `);
+        // ✅ FIXED: Korallenriffe - Korrekter Typ basierend auf Layer
+        if (layerId === 'coral-warm' || layerId === 'coral-cold') {
+          const name = props.COUNTRY || props.NAME || 'Korallenriff';
+          
+          // Bestimme korrekten Standard-Typ basierend auf Layer
+          let defaultType;
+          if (layerId === 'coral-cold') {
+            defaultType = 'Kaltwasserkoralle';
+          } else if (layerId === 'coral-warm') {
+            defaultType = 'Warmwasserkoralle';
+          } else {
+            defaultType = 'Korallenriff';
+          }
+          
+          const type = props.TYPE || props.type || defaultType;
+          
+          layer.bindPopup(`
+            <div class="popup-title">${name}</div>
+            <div class="popup-info">
+              🪸 Typ: ${type}<br>
+              ${props.AREA_KM2 ? `📏 Fläche: ${props.AREA_KM2} km²` : ''}
+            </div>
+          `);
+          return;
+        }
       }
     });
 
     geoJsonLayer.addTo(map);
     activeOverlays.set(layerId, geoJsonLayer);
-    updateLegend(layerConfig);
+    
+    // ✅ Update legend basierend auf Layer-Typ
+    if (layerId === 'coral-warm' || layerId === 'coral-cold') {
+      // Für Korallen: Zeige alle aktiven Korallen-Layer zusammen
+      updateCoralLegends();
+    } else {
+      // Für andere Layer (z.B. Mikroplastik): Zeige normale Legende
+      updateLegend(layerConfig);
+    }
     
     console.log(`✅ ${layerConfig.name} geladen`);
   } catch (error) {
@@ -220,6 +243,7 @@ function initCoralLayers() {
         if (activeOverlays.has('coral-warm')) {
           map.removeLayer(activeOverlays.get('coral-warm'));
           activeOverlays.delete('coral-warm');
+          updateCoralLegends();
         }
       }
     });
@@ -234,10 +258,71 @@ function initCoralLayers() {
         if (activeOverlays.has('coral-cold')) {
           map.removeLayer(activeOverlays.get('coral-cold'));
           activeOverlays.delete('coral-cold');
+          updateCoralLegends();
         }
       }
     });
   }
+}
+
+// ============================================================================
+// ✅ FUNKTION: Update Coral Legends (zeigt aktive Korallen-Layer)
+// ============================================================================
+
+function updateCoralLegends() {
+  const legendContent = document.getElementById('legend-content');
+  if (!legendContent) return;
+  
+  // Sammle alle aktiven Korallen-Layer
+  const activeCoralLayers = [];
+  
+  if (activeOverlays.has('coral-warm')) {
+    activeCoralLayers.push(layers['coral-warm']);
+  }
+  
+  if (activeOverlays.has('coral-cold')) {
+    activeCoralLayers.push(layers['coral-cold']);
+  }
+  
+  // Wenn keine Korallen-Layer aktiv: Zeige Platzhalter
+  if (activeCoralLayers.length === 0) {
+    legendContent.innerHTML = '<p class="legend-placeholder">Wähle einen Layer aus um Details zu sehen</p>';
+    return;
+  }
+  
+  // Zeige alle aktiven Korallen-Layer
+  let html = '';
+  
+  activeCoralLayers.forEach((layerConfig, index) => {
+    const { title, description, source, sourceUrl, color } = layerConfig.legend;
+    
+    if (index > 0) html += '<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;"></div>';
+    
+    html += `<div class="legend-item"><strong>${title}</strong></div>`;
+    
+    if (description) {
+      html += `<div class="legend-item" style="font-size: 0.8rem; color: #666; margin-top: 0.3rem;">${description}</div>`;
+    }
+    
+    if (source) {
+      if (sourceUrl) {
+        // Zeige Quelle als klickbaren Link
+        html += `<div class="legend-item" style="font-size: 0.75rem; color: #999; margin-top: 0.2rem;">📊 <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" style="color: #1e3c72; text-decoration: none;">${source}</a></div>`;
+      } else {
+        // Zeige Quelle nur als Text (Fallback)
+        html += `<div class="legend-item" style="font-size: 0.75rem; color: #999; margin-top: 0.2rem;">📊 ${source}</div>`;
+      }
+    }
+    
+    html += `
+      <div class="legend-item" style="margin-top: 0.5rem;">
+        <span class="legend-color" style="background: ${color};"></span>
+        Riff-Gebiete
+      </div>
+    `;
+  });
+  
+  legendContent.innerHTML = html;
 }
 
 // ============================================================================
@@ -1046,6 +1131,8 @@ function setupCheckboxListeners() {
         if (activeOverlays.has('microplastics')) {
           map.removeLayer(activeOverlays.get('microplastics'));
           activeOverlays.delete('microplastics');
+          // Zeige Korallen-Legenden wieder, falls vorhanden
+          updateCoralLegends();
         }
       }
     });
@@ -1076,9 +1163,8 @@ function setupCheckboxListeners() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 CoralReefMap v5.2 (FIXED WMS) startet...');
-  console.log('✅ Alle WMS-Layer funktionieren jetzt!');
-  console.log('🌡️ SST jetzt verfügbar!');
+  console.log('🚀 CoralReefMap v5.3 startet...');
+  console.log('✅ FIXED: Coral popup types + Legend display');
   
   initMap();
   setupCheckboxListeners();
