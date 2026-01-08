@@ -1,6 +1,6 @@
 /**
  * Konfigurationsdatei für die CoralReefMap
- * VERSION: 5.2 - Mit funktionierenden WMS-Layern (FIXED)
+ * VERSION: 5.3 - All layers now have sources in legends
  */
 
 // ============================================================================
@@ -23,7 +23,9 @@ export const layers = {
     },
     legend: {
       title: "Warmwasser-Korallenriffe",
-      description: "Tropische und subtropische Korallenriffe (UNEP-WCMC 2018)",
+      description: "Tropische und subtropische Korallenriffe",
+      source: "UNEP World Conservation Monitoring Centre (WCMC) 2018",
+      sourceUrl: "https://habitats.oceanplus.org/",
       color: "#FF6B6B"
     }
   },
@@ -43,7 +45,9 @@ export const layers = {
     },
     legend: {
       title: "Kaltwasser-Korallenriffe",
-      description: "Tiefwasser-Korallenriffe in kalten Gewässern (UNEP-WCMC 2018)",
+      description: "Tiefwasser-Korallenriffe in kalten Gewässern",
+      source: "UNEP World Conservation Monitoring Centre (WCMC) 2018",
+      sourceUrl: "https://habitats.oceanplus.org/",
       color: "#4A90E2"
     }
   },
@@ -65,6 +69,8 @@ export const layers = {
     legend: {
       title: "Häfen weltweit",
       description: "Globale Häfen-Datenbank (sichtbar ab Zoom 5, gruppiert bis Zoom 7)",
+      source: "World Port Index (National Geospatial-Intelligence Agency)",
+      sourceUrl: "https://msi.nga.mil/Publications/WPI",
       color: "#FF9800"
     },
     icon: "⚓",  // Emoji beibehalten
@@ -93,7 +99,9 @@ export const layers = {
     },
     legend: {
       title: "Tauchspots weltweit",
-      description: "Tauchplätze und Tauchzentren aus OpenStreetMap",
+      description: "Tauchplätze und Tauchzentren",
+      source: "OpenStreetMap (Overpass API)",
+      sourceUrl: "https://www.openstreetmap.org/",
       color: "#00BCD4"
     },
     icon: "🤿"
@@ -110,7 +118,8 @@ export const layers = {
     legend: {
       title: "Meeresoberflächentemperatur (SST)",
       description: "NOAA Coral Reef Watch - CoralTemp SST v3.1 | Satellitendaten, täglich aktualisiert",
-      source: "5km Resolution, Oberfläche (0-5m Tiefe)",
+      source: "NOAA Coral Reef Watch - 5km Resolution, Oberfläche (0-5m Tiefe)",
+      sourceUrl: "https://coralreefwatch.noaa.gov/",
       unit: "°C (Grad Celsius)",
       levels: [
         { value: "< 20", color: "#000080", label: "< 20°C - Zu kalt für tropische Korallen ❄️" },
@@ -135,7 +144,8 @@ export const layers = {
     legend: {
       title: "Degree Heating Weeks (DHW)",
       description: "NOAA Coral Reef Watch - Akkumulierter Hitzestress",
-      source: "5km Resolution",
+      source: "NOAA Coral Reef Watch - 5km Resolution",
+      sourceUrl: "https://coralreefwatch.noaa.gov/",
       unit: "°C-Wochen",
       levels: [
         { value: "0-2", color: "#00FF00", label: "Normal" },
@@ -159,7 +169,8 @@ export const layers = {
     legend: {
       title: "Chlorophyll-a Konzentration",
       description: "NOAA CoastWatch VIIRS - Indikator für Algenwachstum",
-      source: "Global, 4km, wöchentlich",
+      source: "NOAA CoastWatch VIIRS - Global, 4km, wöchentlich",
+      sourceUrl: "https://coastwatch.noaa.gov/",
       unit: "mg/m³",
       levels: [
         { value: "< 0.1", color: "#000080", label: "Sehr niedrig (oligotroph)" },
@@ -183,7 +194,8 @@ export const layers = {
     legend: {
       title: "Diffuse Dämpfung (Kd490)",
       description: "NOAA CoastWatch VIIRS - Indikator für Wasserklarheit",
-      source: "Global, 4km, 8-Tage Komposit",
+      source: "NOAA CoastWatch VIIRS - Global, 4km, 8-Tage Komposit",
+      sourceUrl: "https://coastwatch.noaa.gov/",
       unit: "m⁻¹",
       levels: [
         { value: "< 0.05", color: "#000080", label: "Sehr klar" },
@@ -208,7 +220,8 @@ export const layers = {
     legend: {
       title: "Bleaching Alert Area (BAA)",
       description: "NOAA Coral Reef Watch - Warnsystem für Korallenbleiche",
-      source: "5km Resolution, täglich aktualisiert",
+      source: "NOAA Coral Reef Watch - 5km Resolution, täglich aktualisiert",
+      sourceUrl: "https://coralreefwatch.noaa.gov/",
       unit: "Alert Level",
       levels: [
         { value: "Blau", color: "#0066CC", label: "Keine Daten / Normal - Sicher ✓" },
@@ -269,7 +282,8 @@ export const layers = {
     legend: {
       title: "Mikroplastik-Konzentration",
       description: "Globale Messungen von Mikroplastik in Meerwasser und Sedimenten",
-      source: "Verschiedene wissenschaftliche Studien",
+      source: "Verschiedene wissenschaftliche Studien (Marine Microplastics Database)",
+      sourceUrl: "https://marinedebris.noaa.gov/",
       unit: "pieces/m³ oder pieces/kg",
       levels: [
         { value: "Very Low", color: "#00FF00", label: "Sehr niedrig (0-0.0005 pieces/m³)" },
@@ -320,6 +334,7 @@ export const layers = {
       title: "Öl- und Chemie-Vorfälle",
       description: "NOAA Incident News - Verschmutzungsvorfälle weltweit",
       source: "NOAA Office of Response and Restoration",
+      sourceUrl: "https://response.restoration.noaa.gov/",
       levels: [
         { value: "Oil", color: "#000000", label: "🛢️ Ölverschmutzung" },
         { value: "Chemical", color: "#9C27B0", label: "⚗️ Chemische Verschmutzung" },
