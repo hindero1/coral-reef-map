@@ -70,8 +70,7 @@ export const layers = {
       title: "Häfen weltweit",
       description: "Globale Häfen-Datenbank (sichtbar ab Zoom 5, gruppiert bis Zoom 7)",
       source: "World Port Index (National Geospatial-Intelligence Agency)",
-      sourceUrl: "https://msi.nga.mil/Publications/WPI",
-      color: "#FF9800"
+      sourceUrl: "https://msi.nga.mil/Publications/WPI"
     },
     icon: "⚓",  // Emoji beibehalten
     iconSize: 12,  // Kleiner machen
@@ -101,8 +100,7 @@ export const layers = {
       title: "Tauchspots weltweit",
       description: "Tauchplätze und Tauchzentren",
       source: "OpenStreetMap (Overpass API)",
-      sourceUrl: "https://www.openstreetmap.org/",
-      color: "#00BCD4"
+      sourceUrl: "https://www.openstreetmap.org/"
     },
     icon: "🤿"
   },
